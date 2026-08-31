@@ -867,6 +867,8 @@ These exist *because* of the ad model — do not remove them without understandi
 | 7 | No ads in the first session run | First-session retention > first-session revenue | Yes (config) |
 | 8 | Ad layer fully abstracted behind `AdProvider` | Lets us ship on web and mobile from one codebase and test without an SDK | Hard |
 | 9 | 10% power buffer on eat rule | Removes coin-flip outcomes | Yes |
+| 10 | Engine version pinned to **Godot 4.7.2 stable** | Repo's `project.godot` already declared features `"4.7", "GL Compatibility"`; newest stable 4.x available at Phase 0. Recorded in `docs/ENVIRONMENT.md`. | Yes |
+| 11 | Dev sandbox has no GPU/audio/display; all AI-side runs are headless or under Xvfb+Mesa llvmpipe | Sandbox constraint, not a choice. Perf budgets (§19), audio quality, and touch feel must be human-verified on real hardware (Part C of `docs/HUMAN_TASKS.md`). `tools/setup_env.sh` restores the toolchain after sandbox restarts. | Yes |
 | … | *(you must append every new decision here)* | | |
 
 ---
