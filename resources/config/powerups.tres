@@ -1,0 +1,110 @@
+[gd_resource type="Resource" script_class="PowerUpTable" load_steps=8 format=3]
+
+[ext_resource type="Script" path="res://scripts/config/powerup_table.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/config/powerup_def.gd" id="2"]
+
+[sub_resource type="Resource" id="surge"]
+script = ExtResource("2")
+type = 0
+display_name = "Surge"
+duration = 6.0
+rarity_weight = 25.0
+color = Color(1, 0.85, 0.2, 1)
+speed_multiplier = 1.35
+turn_multiplier = 1.15
+pull_radius = 9.0
+pull_speed = 14.0
+grants_invuln = false
+bonus_power = 18.0
+collectible_multiplier = 2.0
+slow_radius = 16.0
+slow_multiplier = 0.7
+
+[sub_resource type="Resource" id="magnet"]
+script = ExtResource("2")
+type = 1
+display_name = "Magnet"
+duration = 8.0
+rarity_weight = 22.0
+color = Color(0.25, 0.6, 1, 1)
+speed_multiplier = 1.35
+turn_multiplier = 1.15
+pull_radius = 9.0
+pull_speed = 14.0
+grants_invuln = false
+bonus_power = 18.0
+collectible_multiplier = 2.0
+slow_radius = 16.0
+slow_multiplier = 0.7
+
+[sub_resource type="Resource" id="aegis"]
+script = ExtResource("2")
+type = 2
+display_name = "Aegis"
+duration = 12.0
+rarity_weight = 10.0
+color = Color(0.75, 1, 1, 1)
+speed_multiplier = 1.35
+turn_multiplier = 1.15
+pull_radius = 9.0
+pull_speed = 14.0
+grants_invuln = true
+bonus_power = 18.0
+collectible_multiplier = 2.0
+slow_radius = 16.0
+slow_multiplier = 0.7
+
+[sub_resource type="Resource" id="bloom"]
+script = ExtResource("2")
+type = 3
+display_name = "Bloom"
+duration = 0.0
+rarity_weight = 18.0
+color = Color(1, 0.45, 0.75, 1)
+speed_multiplier = 1.35
+turn_multiplier = 1.15
+pull_radius = 9.0
+pull_speed = 14.0
+grants_invuln = false
+bonus_power = 18.0
+collectible_multiplier = 2.0
+slow_radius = 16.0
+slow_multiplier = 0.7
+
+[sub_resource type="Resource" id="doubler"]
+script = ExtResource("2")
+type = 4
+display_name = "Doubler"
+duration = 10.0
+rarity_weight = 15.0
+color = Color(1, 0.8, 0.35, 1)
+speed_multiplier = 1.35
+turn_multiplier = 1.15
+pull_radius = 9.0
+pull_speed = 14.0
+grants_invuln = false
+bonus_power = 18.0
+collectible_multiplier = 2.0
+slow_radius = 16.0
+slow_multiplier = 0.7
+
+[sub_resource type="Resource" id="chill"]
+script = ExtResource("2")
+type = 5
+display_name = "Chill"
+duration = 7.0
+rarity_weight = 10.0
+color = Color(0.5, 0.8, 1, 1)
+speed_multiplier = 1.35
+turn_multiplier = 1.15
+pull_radius = 9.0
+pull_speed = 14.0
+grants_invuln = false
+bonus_power = 18.0
+collectible_multiplier = 2.0
+slow_radius = 16.0
+slow_multiplier = 0.7
+
+[resource]
+script = ExtResource("1")
+entries = Array[ExtResource("2")]([SubResource("surge"), SubResource("magnet"), SubResource("aegis"), SubResource("bloom"), SubResource("doubler"), SubResource("chill")])

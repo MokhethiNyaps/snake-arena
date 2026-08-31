@@ -1,0 +1,102 @@
+[gd_scene load_steps=10 format=3]
+
+[ext_resource type="Script" path="res://scenes/arena/arena.gd" id="1"]
+
+[sub_resource type="CylinderMesh" id="ground_mesh"]
+top_radius = 120.0
+bottom_radius = 120.0
+height = 0.5
+radial_segments = 64
+rings = 1
+
+[sub_resource type="StandardMaterial3D" id="ground_mat"]
+albedo_color = Color(0.07, 0.09, 0.14, 1)
+metallic = 0.0
+roughness = 0.92
+
+[sub_resource type="CylinderMesh" id="boundary_mesh"]
+top_radius = 120.0
+bottom_radius = 120.0
+height = 6.0
+radial_segments = 96
+cap_top = false
+cap_bottom = false
+
+[sub_resource type="StandardMaterial3D" id="boundary_mat"]
+shading_mode = 0
+transparency = 1
+albedo_color = Color(0.1, 0.9, 1, 0.16)
+emission_enabled = true
+emission = Color(0.1, 0.85, 1, 1)
+emission_energy_multiplier = 0.6
+cull_mode = 2
+
+[sub_resource type="TorusMesh" id="soft_ring_mesh"]
+inner_radius = 111.0
+outer_radius = 112.0
+rings = 96
+ring_segments = 8
+
+[sub_resource type="StandardMaterial3D" id="soft_ring_mat"]
+shading_mode = 0
+transparency = 1
+albedo_color = Color(1, 0.2, 0.15, 0.35)
+emission_enabled = true
+emission = Color(1, 0.2, 0.15, 1)
+emission_energy_multiplier = 0.8
+cull_mode = 2
+
+[sub_resource type="Environment" id="env"]
+background_mode = 1
+background_color = Color(0.015, 0.025, 0.05, 1)
+ambient_light_source = 2
+ambient_light_color = Color(0.25, 0.3, 0.4, 1)
+ambient_light_energy = 1.0
+
+[sub_resource type="CylinderMesh" id="center_marker_mesh"]
+top_radius = 1.0
+bottom_radius = 1.0
+height = 0.6
+radial_segments = 24
+
+[sub_resource type="StandardMaterial3D" id="center_marker_mat"]
+shading_mode = 0
+albedo_color = Color(0.1, 0.9, 1, 1)
+emission_enabled = true
+emission = Color(0.1, 0.9, 1, 1)
+emission_energy_multiplier = 0.7
+
+[node name="Arena" type="Node3D"]
+script = ExtResource("1")
+
+[node name="Ground" type="MeshInstance3D" parent="."]
+mesh = SubResource("ground_mesh")
+surface_material_override/0 = SubResource("ground_mat")
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.25, 0)
+
+[node name="Boundary" type="MeshInstance3D" parent="."]
+mesh = SubResource("boundary_mesh")
+surface_material_override/0 = SubResource("boundary_mat")
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3, 0)
+
+[node name="SoftZoneRing" type="MeshInstance3D" parent="."]
+mesh = SubResource("soft_ring_mesh")
+surface_material_override/0 = SubResource("soft_ring_mat")
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.06, 0)
+
+[node name="CenterMarker" type="MeshInstance3D" parent="."]
+mesh = SubResource("center_marker_mesh")
+surface_material_override/0 = SubResource("center_marker_mat")
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.3, 0)
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.819152, 0.48642, -0.303949, 0, 0.529919, 0.848048, 0.573576, -0.69468, 0.434084, 0, 0, 0)
+shadow_enabled = true
+directional_shadow_max_distance = 200.0
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("env")
+
+[node name="ArenaCamera" type="Camera3D" parent="."]
+fov = 55.0
+transform = Transform3D(1, 0, 0, 0, 0.533993, 0.845489, 0, -0.845489, 0.533993, 0, 95, 60)

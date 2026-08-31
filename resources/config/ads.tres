@@ -1,0 +1,110 @@
+[gd_resource type="Resource" script_class="AdConfig" load_steps=12 format=3]
+
+[ext_resource type="Script" path="res://scripts/config/ad_config.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/ads/ad_placement.gd" id="2"]
+
+[sub_resource type="Resource" id="inter_run"]
+script = ExtResource("2")
+id = 0
+type = 0
+min_run_index = 3
+min_gap_seconds = 120.0
+session_cap = 6
+daily_cap = -1
+grant_on_no_fill = false
+
+[sub_resource type="Resource" id="menu_return"]
+script = ExtResource("2")
+id = 1
+type = 0
+min_run_index = 0
+min_gap_seconds = 180.0
+session_cap = 6
+daily_cap = -1
+grant_on_no_fill = false
+
+[sub_resource type="Resource" id="revive"]
+script = ExtResource("2")
+id = 2
+type = 1
+min_run_index = 0
+min_gap_seconds = 0.0
+session_cap = 4
+daily_cap = 8
+grant_on_no_fill = false
+
+[sub_resource type="Resource" id="double_coins"]
+script = ExtResource("2")
+id = 3
+type = 1
+min_run_index = 0
+min_gap_seconds = 0.0
+session_cap = 6
+daily_cap = -1
+grant_on_no_fill = true
+
+[sub_resource type="Resource" id="mission_reroll"]
+script = ExtResource("2")
+id = 4
+type = 1
+min_run_index = 0
+min_gap_seconds = 0.0
+session_cap = 1
+daily_cap = 1
+grant_on_no_fill = true
+
+[sub_resource type="Resource" id="skin_trial"]
+script = ExtResource("2")
+id = 5
+type = 1
+min_run_index = 0
+min_gap_seconds = 0.0
+session_cap = 2
+daily_cap = 2
+grant_on_no_fill = true
+
+[sub_resource type="Resource" id="starter_boost"]
+script = ExtResource("2")
+id = 6
+type = 1
+min_run_index = 0
+min_gap_seconds = 0.0
+session_cap = 1
+daily_cap = -1
+grant_on_no_fill = true
+
+[sub_resource type="Resource" id="banner_menu"]
+script = ExtResource("2")
+id = 7
+type = 2
+min_run_index = 0
+min_gap_seconds = 0.0
+session_cap = -1
+daily_cap = -1
+grant_on_no_fill = false
+
+[sub_resource type="Resource" id="app_open"]
+script = ExtResource("2")
+id = 8
+type = 3
+min_run_index = 2
+min_gap_seconds = 14400.0
+session_cap = 2
+daily_cap = 4
+grant_on_no_fill = false
+
+[resource]
+script = ExtResource("1")
+ads_enabled = true
+use_mock_in_editor = true
+session_interstitial_cap = 6
+app_open_cooldown_hours = 4.0
+privacy_policy_url = ""
+terms_url = ""
+app_id = "ca-app-pub-3940256099942544~3347511713"
+app_open_ad_unit_id = "ca-app-pub-3940256099942544/5575463023"
+banner_ad_unit_id = "ca-app-pub-3940256099942544/2934735716"
+interstitial_ad_unit_id = "ca-app-pub-3940256099942544/4411468910"
+rewarded_ad_unit_id = "ca-app-pub-3940256099942544/1712485313"
+rewarded_interstitial_ad_unit_id = "ca-app-pub-3940256099942544/6978759866"
+placements = Array[ExtResource("2")]([SubResource("inter_run"), SubResource("menu_return"), SubResource("revive"), SubResource("double_coins"), SubResource("mission_reroll"), SubResource("skin_trial"), SubResource("starter_boost"), SubResource("banner_menu"), SubResource("app_open")])

@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="AIPersonalityConfig" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/config/ai_personality_config.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+display_name = "Opportunist"
+aggro_radius = 30.0
+fear_radius = 30.0
+greed = 0.8
+cutoff_skill = 0.7
+boost_willingness = 0.55
+reaction_delay = 0.2
+aim_error_deg = 6.0
+sense_radius = 55.0
+collectible_sense_radius = 28.0
+blunder_chance = 0.04
+wander_min_interval = 3.0
+wander_max_interval = 6.0

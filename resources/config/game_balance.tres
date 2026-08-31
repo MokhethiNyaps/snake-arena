@@ -1,0 +1,27 @@
+[gd_resource type="Resource" script_class="GameBalanceConfig" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/config/game_balance_config.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+arena_radius = 120.0
+soft_zone_width = 8.0
+soft_zone_slow_multiplier = 0.85
+free_growth_window = 20.0
+ramp_end_time = 60.0
+shrink_start_time = 180.0
+shrink_rate = 0.6
+shrink_floor_radius = 70.0
+surge_interval = 45.0
+surge_collectible_count = 40
+surge_rare_count = 1
+target_collectible_count = 420
+refill_rate_per_second = 18.0
+max_rare_alive = 6
+ai_count = 8
+ai_respawn_delay = 2.5
+ai_min_spawn_distance = 45.0
+min_spawn_distance_from_player = 22.0
+collectible_min_spawn_distance = 6.0
+spawn_retry_attempts = 12
+powerup_target_count = 5
