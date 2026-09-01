@@ -20,14 +20,14 @@ var _pre_ad_state: State = State.BOOT
 ## this table authoritative.
 const _VALID_TRANSITIONS: Dictionary = {
 	State.BOOT: [State.MENU, State.LOADING],
-	State.MENU: [State.LOADING, State.COUNTDOWN],
+	State.MENU: [State.LOADING, State.COUNTDOWN, State.PAUSED_FOR_AD],
 	State.LOADING: [State.MENU, State.COUNTDOWN, State.PLAYING],
 	State.COUNTDOWN: [State.PLAYING],
 	State.PLAYING: [State.PAUSED, State.PAUSED_FOR_AD, State.DYING, State.GAME_OVER],
 	State.PAUSED: [State.PLAYING, State.MENU, State.GAME_OVER],
 	State.PAUSED_FOR_AD: [State.PLAYING, State.PAUSED, State.MENU, State.GAME_OVER],
 	State.DYING: [State.GAME_OVER],
-	State.GAME_OVER: [State.MENU, State.LOADING],
+	State.GAME_OVER: [State.MENU, State.LOADING, State.PAUSED_FOR_AD],
 }
 
 

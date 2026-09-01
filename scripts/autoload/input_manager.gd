@@ -82,5 +82,13 @@ func set_scheme_for_test(scheme: Scheme) -> void:
 	scheme_changed.emit(scheme)
 
 
+## §20 — debug toggle edge (F3). Polled by the debug panel; keeps all
+## Input.* access inside this file per §7.
+func debug_toggle_pressed() -> bool:
+	if _suspended:
+		return false
+	return Input.is_action_just_pressed("debug_toggle")
+
+
 func _is_boost_held() -> bool:
 	return Input.is_action_pressed("boost")

@@ -31,6 +31,12 @@ var _econ_boost_start: float = 0.0
 ## Minimum power observed while the boost key was held (drain evidence even
 ## if incidental collects raise power mid-boost).
 var _min_power_during_boost: float = 0.0
+# Phase 4 (ad scaffolding) scenario state.
+var _ad_entered: bool = false
+var _ad_contract_ok: bool = false
+var _ad_rewarded_ok: bool = false
+var _ad_timeout_ok: bool = false
+var _panel_was_visible: bool = false
 
 var _max_frame_ms: float = 0.0
 var _frame_samples: int = 0
@@ -38,6 +44,9 @@ var _frame_acc_ms: float = 0.0
 
 
 func _ready() -> void:
+	# The ad contract pauses the whole tree; the harness driver must keep
+	# ticking regardless (PROCESS_MODE_ALWAYS) or scenario D deadlocks.
+	process_mode = Node.PROCESS_MODE_ALWAYS
 	_build_world()
 
 
@@ -173,9 +182,96 @@ func _physics_process(delta: float) -> void:
 			if _phase_frames >= 40:
 				Input.parse_input_event(_key(KEY_SPACE, false))
 				_enter_phase(10)
-		10:  # settle, then final economy checks + screenshot + verdict
+		10:  # settle, then economy checks, then the ad scenario (Phase 4)
 			if _phase_frames >= 15:
 				_checks_economy()
+		11:  # debug ad panel: F3 toggles it (§20); leave it visible
+			if _phase_frames == 1:
+				var panel: CanvasLayer = AdManager.get_debug_panel()
+				if panel == null:
+					_fail("debug ad panel missing (debug build required)")
+					return
+				Input.parse_input_event(_key(KEY_F3, true))
+				Input.parse_input_event(_key(KEY_F3, false))
+			if _phase_frames == 5:
+				var panel2: CanvasLayer = AdManager.get_debug_panel()
+				if not panel2.get_node("Root").visible:
+					_fail("F3 did not show the debug ad panel")
+					return
+				_panel_was_visible = true
+				_enter_phase(12)
+		12:  # trigger a MOCK REWARDED ad from the panel: contract must
+			# pause/duck/suspend/overlay, then restore + reward
+			if _phase_frames == 1:
+				var panel3: CanvasLayer = AdManager.get_debug_panel()
+				panel3._on_fill_changed(100.0)
+				panel3._on_latency_changed(0.1)
+				panel3._on_auto_close_changed(1.0)
+				panel3._on_outcome_changed(AdProviderMock.ForcedOutcome.COMPLETED)
+				panel3.trigger_rewarded()
+			if not _ad_entered and not AdManager._busy and _phase_frames > 20:
+				_fail("rewarded ad never engaged (frames=%d)" % _phase_frames)
+				return
+			if AdManager._busy and not _ad_entered:
+				_ad_entered = true
+				# §45.6 contract: paused + ducked + suspended + overlay.
+				_ad_contract_ok = get_tree().paused \
+					and AudioManager._ducked \
+					and InputManager.is_suspended() \
+					and AdManager._overlay.visible
+				if not _ad_contract_ok:
+					_fail("ad contract not fully engaged (paused=%s ducked=%s suspended=%s overlay=%s)" % [
+						get_tree().paused, AudioManager._ducked,
+						InputManager.is_suspended(), AdManager._overlay.visible])
+					return
+			if _ad_entered and not AdManager._busy:
+				# Resolved: contract must be fully restored.
+				var panel4: CanvasLayer = AdManager.get_debug_panel()
+				var restored: bool = not get_tree().paused \
+					and not AudioManager._ducked \
+					and not InputManager.is_suspended() \
+					and not AdManager._overlay.visible \
+					and GameManager.current_state == GameManager.State.PLAYING
+				var rewarded: bool = panel4.last_result_code == AdResult.Code.SHOWN_COMPLETED and panel4.last_rewarded
+				_ad_rewarded_ok = restored and rewarded
+				if not _ad_rewarded_ok:
+					_fail("rewarded ad restore/reward failed (restored=%s result=%d rewarded=%s)" % [
+						restored, panel4.last_result_code, panel4.last_rewarded])
+					return
+				print("CC_VERIFY_AD_REWARDED ok contract=%s" % _ad_contract_ok)
+				_enter_phase(13)
+			if _phase_frames > 400:
+				_fail("rewarded ad phase timed out")
+				return
+		13:  # FORCED TIMEOUT: the mandatory watchdog must unstick the game
+			if _phase_frames == 1:
+				_ad_entered = false
+				var panel5: CanvasLayer = AdManager.get_debug_panel()
+				panel5._on_outcome_changed(AdProviderMock.ForcedOutcome.TIMEOUT)
+				AdManager._config.show_watchdog_seconds = 1.0
+				panel5.trigger_interstitial()
+			if AdManager._busy and not _ad_entered:
+				_ad_entered = true
+			if _ad_entered and not AdManager._busy:
+				var panel6: CanvasLayer = AdManager.get_debug_panel()
+				var restored: bool = not get_tree().paused \
+					and not AudioManager._ducked \
+					and not InputManager.is_suspended() \
+					and not AdManager._overlay.visible \
+					and GameManager.current_state == GameManager.State.PLAYING
+				_ad_timeout_ok = restored and panel6.last_result_code == AdResult.Code.TIMEOUT
+				if not _ad_timeout_ok:
+					_fail("timeout path failed (restored=%s result=%d)" % [restored, panel6.last_result_code])
+					return
+				print("CC_VERIFY_AD_TIMEOUT ok watchdog un-stuck the game")
+				AdManager._config.show_watchdog_seconds = 90.0
+				_enter_phase(14)
+			if _phase_frames > 400:
+				_fail("timeout ad phase timed out")
+				return
+		14:  # settle, then final verdict + screenshot
+			if _phase_frames >= 20:
+				_checks_ads()
 
 
 func _enter_phase(p: int) -> void:
@@ -257,11 +353,11 @@ func _checks_big() -> void:
 
 
 ## Phase 3 economy exit criteria (§48: 420 collectibles alive, collecting
-## is satisfying, 60 FPS held) + the Phase 2 frame-budget + framing checks.
+## is satisfying, 60 FPS held). Passes → the run continues into the Phase 4
+## ad scenario.
 func _checks_economy() -> void:
 	if _finished:
 		return
-	_finished = true
 	# 10. Boost shed motes (§3.4): mote count grew while boosting.
 	var cm: CollectibleManager = _arena.collectible_manager
 	if cm.mote_count() <= _econ_motes_before:
@@ -272,12 +368,36 @@ func _checks_economy() -> void:
 	if _min_power_during_boost >= _econ_boost_start:
 		_fail("economy boost did not drain (min %.2f vs start %.2f)" % [_min_power_during_boost, _econ_boost_start])
 		return
-	# 12. Frame budget across ALL scenarios (worst case: 420 collectibles
-	# + VFX + 60-segment snake). Regression threshold 20 ms (llvmpipe).
+	print("CC_VERIFY_PHASE3_PASS collectibles=%d motes=%d score=%.1f combo=%d" % [
+		cm.non_mote_count(), cm.mote_count(), _arena.score_manager.get_score(),
+		_arena.score_manager.get_combo()])
+	_enter_phase(11)
+
+
+## Phase 4 ad-scaffolding exit criteria (§48: trigger a mock ad from the
+## debug panel at any time; the game pauses and resumes perfectly,
+## including on forced timeout) + the cross-phase frame-budget/framing
+## checks + screenshot.
+func _checks_ads() -> void:
+	if _finished:
+		return
+	_finished = true
+	if not _panel_was_visible:
+		_fail("debug ad panel did not toggle")
+		return
+	if not _ad_rewarded_ok:
+		_fail("rewarded mock-ad flow failed")
+		return
+	if not _ad_timeout_ok:
+		_fail("forced-timeout watchdog flow failed")
+		return
+	# Frame budget across ALL scenarios (worst case: 420 collectibles +
+	# VFX + 60-segment snake + ad overlay). Regression threshold 20 ms
+	# (llvmpipe — real 16.7 ms target is human-verified, decision #11).
 	if _max_frame_ms > 20.0:
 		_fail("frame budget blown: max %.1f ms (avg %.1f)" % [_max_frame_ms, _frame_acc_ms / maxf(1.0, float(_frame_samples))])
 		return
-	# 13. Framing: the head must project on-screen, near centre.
+	# Framing: the head must project on-screen, near centre.
 	var view_cam2: Camera3D = get_viewport().get_camera_3d()
 	var head_screen: Vector2 = view_cam2.unproject_position(_snake.head_position())
 	var on_screen: bool = (
@@ -290,10 +410,9 @@ func _checks_economy() -> void:
 	if not on_screen:
 		_fail("snake head is off-screen at %s" % head_screen)
 		return
-	print("CC_VERIFY_PHASE3_PASS collectibles=%d motes=%d score=%.1f combo=%d" % [
-		cm.non_mote_count(), cm.mote_count(), _arena.score_manager.get_score(),
-		_arena.score_manager.get_combo()])
-	# 14. Screenshot (skipped in headless mode — no renderer).
+	print("CC_VERIFY_PHASE4_PASS rewarded=%s timeout=%s contract=%s" % [
+		_ad_rewarded_ok, _ad_timeout_ok, _ad_contract_ok])
+	# Screenshot (skipped in headless mode — no renderer).
 	if not DisplayServer.get_name() == "headless":
 		await RenderingServer.frame_post_draw
 		var img: Image = get_viewport().get_texture().get_image()

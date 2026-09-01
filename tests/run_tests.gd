@@ -29,7 +29,7 @@ func _run() -> void:
 		quit(1)
 		return
 	for path in test_files:
-		_run_script(path)
+		await _run_script(path)
 	print("==================================================")
 	print(" RESULTS: %d passed, %d failed" % [_passes, _fails.size()])
 	for f in _script_fails:
@@ -70,11 +70,57 @@ func _run_script(path: String) -> void:
 		if not method_name.begins_with("test_"):
 			continue
 		method_count += 1
-		var result: Variant = instance.call(method_name)
+		var result: Variant = await _run_method(instance, method_name)
 		if typeof(result) == TYPE_BOOL and result == true:
 			_passes += 1
 		else:
 			var detail: String = str(result) if typeof(result) != TYPE_BOOL else ""
 			_fails.append("%s.%s %s" % [path.get_file(), method_name, detail])
+		_reset_contract_state()
 	if method_count == 0:
 		_script_fails.append("%s (no test_* methods)" % path)
+
+
+## Drives one test method to completion, whether it is synchronous or a
+## coroutine (await on a plain value returns it immediately). A test that
+## never resolves within TEST_TIMEOUT_S fails as "timeout" so a hung
+## coroutine can never wedge the whole suite.
+const TEST_TIMEOUT_S: float = 30.0
+
+
+func _run_method(instance: RefCounted, method_name: String) -> Variant:
+	var finished: Array = [false]
+	var slot: Array = [null]
+	var driver := func() -> void:
+		slot[0] = await instance.call(method_name)
+		finished[0] = true
+	driver.call()
+	var timer: SceneTreeTimer = create_timer(TEST_TIMEOUT_S, true)
+	while not finished[0] and timer.time_left > 0.0:
+		await create_timer(0.05, true).timeout
+	if not finished[0]:
+		return "TIMEOUT after %.0fs" % TEST_TIMEOUT_S
+	return slot[0]
+
+
+## Contract safety net: if a test fails mid-ad, the next test must not
+## inherit a paused tree / suspended input / ducked audio / ad state.
+## NOTE: the runner is the --script main script and cannot reference
+## autoload identifiers at parse time (startup ordering), and must NOT
+## preload gameplay scripts either (that would force-compile them in the
+## same broken context). Autoloads are reached through the tree, and the
+## enum via a RUNTIME load().
+func _reset_contract_state() -> void:
+	if paused:
+		paused = false
+	var im: Node = root.get_node_or_null("InputManager")
+	if im != null:
+		im.call("set_suspended", false)
+	var am: Node = root.get_node_or_null("AudioManager")
+	if am != null:
+		am.call("restore_audio")
+	var gm: Node = root.get_node_or_null("GameManager")
+	if gm != null:
+		var gm_script: GDScript = load("res://scripts/autoload/game_manager.gd")
+		if gm.get("current_state") == gm_script.State.PAUSED_FOR_AD:
+			gm.call("request_state", gm_script.State.PLAYING)

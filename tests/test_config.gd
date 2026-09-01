@@ -193,8 +193,30 @@ func test_ad_config_placements_complete() -> bool:
 
 func test_game_manager_state_machine() -> bool:
 	# Autoload is present in --script runs. Drive a valid flow.
+	# State-agnostic entry: other suites may leave any state behind, so
+	# first reach a state that can transition to LOADING.
+	match GameManager.current_state:
+		GameManager.State.PLAYING:
+			if not GameManager.request_state(GameManager.State.GAME_OVER):
+				printerr("  PLAYING -> GAME_OVER refused")
+				return false
+		GameManager.State.PAUSED:
+			if not GameManager.request_state(GameManager.State.GAME_OVER):
+				printerr("  PAUSED -> GAME_OVER refused")
+				return false
+		GameManager.State.PAUSED_FOR_AD:
+			if not GameManager.request_state(GameManager.State.PLAYING):
+				printerr("  PAUSED_FOR_AD -> PLAYING refused")
+				return false
+			if not GameManager.request_state(GameManager.State.GAME_OVER):
+				printerr("  PLAYING -> GAME_OVER refused")
+				return false
+		GameManager.State.DYING:
+			if not GameManager.request_state(GameManager.State.GAME_OVER):
+				printerr("  DYING -> GAME_OVER refused")
+				return false
 	if not GameManager.request_state(GameManager.State.LOADING):
-		printerr("  BOOT -> LOADING refused")
+		printerr("  -> LOADING refused (from %s)" % GameManager.state_name())
 		return false
 	if not GameManager.request_state(GameManager.State.PLAYING):
 		printerr("  LOADING -> PLAYING refused")
@@ -207,5 +229,19 @@ func test_game_manager_state_machine() -> bool:
 		return false
 	if not GameManager.request_state(GameManager.State.PLAYING):
 		printerr("  PAUSED -> PLAYING refused")
+		return false
+	# §45.6 ad-contract transitions (added in Phase 4): PLAYING ->
+	# PAUSED_FOR_AD -> PLAYING, and GAME_OVER -> PAUSED_FOR_AD (revive ad).
+	if not GameManager.request_state(GameManager.State.PAUSED_FOR_AD):
+		printerr("  PLAYING -> PAUSED_FOR_AD refused")
+		return false
+	if not GameManager.request_state(GameManager.State.PLAYING):
+		printerr("  PAUSED_FOR_AD -> PLAYING refused")
+		return false
+	if not GameManager.request_state(GameManager.State.GAME_OVER):
+		printerr("  PLAYING -> GAME_OVER refused")
+		return false
+	if not GameManager.request_state(GameManager.State.PAUSED_FOR_AD):
+		printerr("  GAME_OVER -> PAUSED_FOR_AD refused (revive ad path)")
 		return false
 	return GameManager.request_state(GameManager.State.GAME_OVER)

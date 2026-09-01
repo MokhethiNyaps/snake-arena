@@ -19,6 +19,13 @@ extends Resource
 ## App Open ad at most once per this many hours.
 @export var app_open_cooldown_hours: float = 4.0
 
+@export_group("Watchdogs (§45.6 — mandatory)")
+## Force-resolve a stuck preload after this many seconds.
+@export var load_watchdog_seconds: float = 12.0
+## Force-resolve a stuck show after this many seconds (TIMEOUT). The game
+## must never be able to get stuck behind an ad.
+@export var show_watchdog_seconds: float = 90.0
+
 @export_group("Consent & compliance (§45.8)")
 ## Filled in by the HUMAN (see docs/HUMAN_TASKS.md Part B) — not by the AI.
 @export_multiline var privacy_policy_url: String = ""
