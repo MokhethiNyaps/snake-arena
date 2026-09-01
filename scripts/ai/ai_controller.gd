@@ -268,9 +268,13 @@ func _collect_nearby() -> void:
 		return
 	var radius: float = snake.current_radius + director.collectibles.balance.collect_radius_margin
 	var pickups: Array[Dictionary] = director.collectibles.collect_near(snake.global_position, radius)
+	# §10 DOUBLER applies to AI collects too (same rules as the player).
+	var mult: float = 1.0
+	if director.powerup_manager != null:
+		mult = director.powerup_manager.collect_multiplier(snake)
 	for p in pickups:
-		snake.add_power(float(p["power"]))
-		snake.score += float(p["score"])
+		snake.add_power(float(p["power"]) * mult)
+		snake.score += float(p["score"]) * mult
 
 
 func is_lod_far() -> bool:

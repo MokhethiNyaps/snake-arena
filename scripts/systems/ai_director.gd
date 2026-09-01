@@ -32,6 +32,7 @@ var collectibles: CollectibleManager = null
 var spawn_manager: SpawnManager = null
 var player_snake: SnakeController = null
 var arena_owner: Node3D = null
+var powerup_manager: PowerUpManager = null
 
 var ai_controllers: Array[AIController] = []
 var _used_names: Dictionary = {}  # match-scoped; names never reused

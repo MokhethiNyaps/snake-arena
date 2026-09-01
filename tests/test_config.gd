@@ -115,31 +115,34 @@ func test_collectible_table_matches_spec() -> bool:
 
 
 func test_powerup_table_matches_spec() -> bool:
-	var t: PowerUpTable = load("res://resources/config/powerups.tres")
-	if t.entries.size() != 6:
-		printerr("  expected 6 power-ups, got %d" % t.entries.size())
+	var t: PowerUpTableConfig = load("res://resources/config/powerups.tres")
+	if t.powerups.size() != 6:
+		printerr("  expected 6 power-ups, got %d" % t.powerups.size())
 		return false
-	var surge: PowerUpDef = t.get_def(PowerUpDef.Type.SURGE)
-	var magnet: PowerUpDef = t.get_def(PowerUpDef.Type.MAGNET)
-	var aegis: PowerUpDef = t.get_def(PowerUpDef.Type.AEGIS)
-	var bloom: PowerUpDef = t.get_def(PowerUpDef.Type.BLOOM)
-	var doubler: PowerUpDef = t.get_def(PowerUpDef.Type.DOUBLER)
-	var chill: PowerUpDef = t.get_def(PowerUpDef.Type.CHILL)
+	var surge: PowerUpDef = t.get_def(PowerUpDef.Effect.SURGE)
+	var magnet: PowerUpDef = t.get_def(PowerUpDef.Effect.MAGNET)
+	var aegis: PowerUpDef = t.get_def(PowerUpDef.Effect.AEGIS)
+	var bloom: PowerUpDef = t.get_def(PowerUpDef.Effect.BLOOM)
+	var doubler: PowerUpDef = t.get_def(PowerUpDef.Effect.DOUBLER)
+	var chill: PowerUpDef = t.get_def(PowerUpDef.Effect.CHILL)
 	if surge == null or magnet == null or aegis == null or bloom == null or doubler == null or chill == null:
 		printerr("  missing power-up archetype")
 		return false
 	var ok: bool = (
-		surge.duration == 6.0 and surge.speed_multiplier == 1.35 and surge.turn_multiplier == 1.15
-		and magnet.duration == 8.0 and magnet.pull_radius == 9.0 and magnet.pull_speed == 14.0
-		and aegis.duration == 12.0 and aegis.grants_invuln
-		and bloom.duration == 0.0 and bloom.bonus_power == 18.0
-		and doubler.duration == 10.0 and doubler.collectible_multiplier == 2.0
-		and chill.duration == 7.0 and chill.slow_radius == 16.0 and chill.slow_multiplier == 0.7
+		surge.duration == 6.0 and surge.surge_speed_mult == 1.35 and surge.surge_turn_mult == 1.15
+		and magnet.duration == 8.0 and magnet.magnet_radius == 9.0 and magnet.magnet_pull_speed == 14.0
+		and aegis.duration == 12.0
+		and bloom.duration == 0.0 and bloom.bloom_power == 18.0
+		and doubler.duration == 10.0 and doubler.doubler_mult == 2.0
+		and chill.duration == 7.0 and chill.chill_radius == 16.0 and chill.chill_speed_mult == 0.7
 	)
 	if not ok:
 		printerr("  values diverge from §10 table")
 		return false
-	return is_equal_approx(t.total_weight(), 100.0)
+	var total: int = 0
+	for p in t.powerups:
+		total += p.weight
+	return total == 100
 
 
 func test_personalities_match_spec() -> bool:

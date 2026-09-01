@@ -18,12 +18,18 @@ extends Node3D
 var collectibles: CollectibleManager = null
 var score_mgr: ScoreManager = null
 var spawn_mgr: SpawnManager = null
+var powerup_mgr: PowerUpManager = null
 
 
 func setup_economy(cm: CollectibleManager, sm: ScoreManager, spm: SpawnManager) -> void:
 	collectibles = cm
 	score_mgr = sm
 	spawn_mgr = spm
+
+
+## §10 DOUBLER consult lives in the manager; the collect site just asks.
+func setup_powerups(pm: PowerUpManager) -> void:
+	powerup_mgr = pm
 
 
 func _physics_process(_delta: float) -> void:
@@ -52,11 +58,15 @@ func _try_collect() -> void:
 	var pickups: Array[Dictionary] = collectibles.collect_near(snake.global_position, radius)
 	if pickups.is_empty():
 		return
+	# §10 DOUBLER: 2× score+power from collectibles while active.
+	var mult: float = 1.0
+	if powerup_mgr != null:
+		mult = powerup_mgr.collect_multiplier(snake)
 	for p in pickups:
-		snake.add_power(float(p["power"]))
+		snake.add_power(float(p["power"]) * mult)
 		var steps: int = 0
 		if score_mgr != null:
-			score_mgr.on_collectible(float(p["score"]))
+			score_mgr.on_collectible(float(p["score"]) * mult)
 			steps = score_mgr.get_combo() - 1
 		AudioManager.play_pickup(int(p["type"]), steps, snake.global_position)
 

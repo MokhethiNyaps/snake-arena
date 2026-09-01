@@ -1,49 +1,39 @@
 class_name PowerUpDef
 extends Resource
-## §10 — One power-up archetype (sub-resource of PowerUpTable).
+## §10 — One power-up definition (sub-resource of PowerUpTableConfig).
 ##
-## Owns: effect parameters for one power-up type. Effects themselves are
-##        applied by PowerUpManager through StatModifierStack (Phase 7).
-## Does NOT own: spawn/pool logic.
+## Owns: effect type + tuning for one verb. No behaviour — the
+## PowerUpManager applies effects as stackable-but-capped modifiers on the
+## per-snake StatModifierStack (§10: adding a power-up requires ZERO
+## changes to SnakeController).
 ## Talks to: nothing; pure data.
 
-enum Type { SURGE, MAGNET, AEGIS, BLOOM, DOUBLER, CHILL }
+enum Effect { SURGE, MAGNET, AEGIS, BLOOM, DOUBLER, CHILL }
 
-## Which power-up this defines.
-@export var type: Type = Type.SURGE
-## Human-readable name shown on the HUD chip.
+## Which effect this def configures.
+@export var effect: Effect = Effect.SURGE
+## Display name (HUD chip, debug).
 @export var display_name: String = "Surge"
-## Effect duration in seconds (0 = instant, e.g. BLOOM).
+## Active duration in seconds (0 = instant).
 @export var duration: float = 6.0
-## Relative spawn rarity weight.
-@export var rarity_weight: float = 25.0
-## Aura particle colour (readable by other players).
-@export var color: Color = Color(1.0, 0.85, 0.2)
-
-@export_group("Surge")
-@export var speed_multiplier: float = 1.35
-@export var turn_multiplier: float = 1.15
-
-@export_group("Magnet")
-## Pulls collectibles within this many units toward the snake.
-@export var pull_radius: float = 9.0
-## Pull speed in units/s.
-@export var pull_speed: float = 14.0
-
-@export_group("Aegis")
-## One free death while active (consumed on lethal hit).
-@export var grants_invuln: bool = true
-
-@export_group("Bloom")
-## Instant power granted on pickup.
-@export var bonus_power: float = 18.0
-
-@export_group("Doubler")
-## Multiplier on score AND power gained from collectibles.
-@export var collectible_multiplier: float = 2.0
-
-@export_group("Chill")
-## Opponents within this radius are slowed.
-@export var slow_radius: float = 16.0
-## Their movement speed multiplier while chilled.
-@export_range(0.0, 1.0) var slow_multiplier: float = 0.7
+## Rarity weight in the spawn table (§10).
+@export var weight: int = 25
+## Aura colour — every active effect wears it so other players can read
+## your buffs (§10).
+@export var aura_color: Color = Color(1.0, 0.8, 0.2)
+## SURGE: speed multiplier.
+@export var surge_speed_mult: float = 1.35
+## SURGE: turn-rate multiplier.
+@export var surge_turn_mult: float = 1.15
+## MAGNET: pull radius in units.
+@export var magnet_radius: float = 9.0
+## MAGNET: pull speed in units/second.
+@export var magnet_pull_speed: float = 14.0
+## BLOOM: instant power granted.
+@export var bloom_power: float = 18.0
+## DOUBLER: score+power multiplier on collects.
+@export var doubler_mult: float = 2.0
+## CHILL: radius around the owner.
+@export var chill_radius: float = 16.0
+## CHILL: opponents inside move at this speed multiplier.
+@export var chill_speed_mult: float = 0.7

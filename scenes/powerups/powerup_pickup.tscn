@@ -1,0 +1,13 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/systems/powerup_pickup.gd" id="1"]
+
+[sub_resource type="PrismMesh" id="prism"]
+left_to_right = 0.8
+size = Vector3(1.1, 0.9, 1.1)
+
+[node name="PowerUpPickup" type="Node3D"]
+script = ExtResource("1")
+
+[node name="Mesh" type="MeshInstance3D" parent="."]
+mesh = SubResource("prism")

@@ -133,6 +133,16 @@ func find_valid_collectible_position() -> Vector3:
 	return _candidates[start]
 
 
+## §10 power-up spawn point: valid arena position, 10+ from the player.
+func find_powerup_position() -> Vector3:
+	var radius: float = validity_radius - 4.0
+	for attempt in balance.spawn_retry_attempts:
+		var pos: Vector3 = _random_ring_pos(radius)
+		if _pos_valid(pos, 10.0):
+			return pos
+	return _candidates[_rng.randi() % _candidates.size()]
+
+
 ## AI spawn point (§11: 22 from player general rule; respawns use 45 —
 ## "at least 45 units from the player"; initial spawns use 35 for the
 ## §3.6 free-growth window). Caller passes the required minimum distance.

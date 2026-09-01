@@ -17,6 +17,7 @@ var spawn_manager: SpawnManager = null
 var score_manager: ScoreManager = null
 var ai_director: AIDirector = null
 var combat_manager: CombatManager = null
+var powerup_manager: PowerUpManager = null
 
 var _player_snake: SnakeController = null
 var _player_root: Node3D = null
@@ -49,6 +50,15 @@ func _ready() -> void:
 	combat_manager.score_manager = score_manager
 	combat_manager.ai_director = ai_director
 	combat_manager.arena_owner = self
+	powerup_manager = PowerUpManager.new()
+	powerup_manager.name = "PowerUpManager"
+	add_child(powerup_manager)
+	powerup_manager.collectibles = collectible_manager
+	powerup_manager.spawn_manager = spawn_manager
+	powerup_manager.combat_manager = combat_manager
+	powerup_manager.arena_owner = self
+	combat_manager.aegis_query = Callable(powerup_manager, "has_aegis")
+	ai_director.powerup_manager = powerup_manager
 	_initial_radius = combat_manager.balance.arena_radius
 	_build_vignette()
 	EventBus.game_state_changed.connect(_on_state_changed)
@@ -63,6 +73,7 @@ func setup_world(player_root: Node3D, snake: SnakeController) -> void:
 	spawn_manager.player_snake = snake
 	ai_director.player_snake = snake
 	combat_manager.player_snake = snake
+	powerup_manager.player_snake = snake
 	# Role marker: the combat/score path keys off this group (§9).
 	if not snake.is_in_group("player"):
 		snake.add_to_group("player")
@@ -70,6 +81,7 @@ func setup_world(player_root: Node3D, snake: SnakeController) -> void:
 	snake.wall_hit.connect(_on_player_wall_hit)
 	if player_root is PlayerController:
 		(player_root as PlayerController).setup_economy(collectible_manager, score_manager, spawn_manager)
+		(player_root as PlayerController).setup_powerups(powerup_manager)
 	var rig: Node = player_root.get_node_or_null("CameraRig")
 	if rig != null:
 		combat_manager.rig = rig
@@ -150,6 +162,7 @@ func _physics_process(delta: float) -> void:
 	spawn_manager.top_up()
 	ai_director.tick(delta)
 	combat_manager.tick(delta)
+	powerup_manager.tick(delta)
 	_sync_shrink_visuals()
 	if GameManager.is_in(GameManager.State.PLAYING) \
 			and _player_snake != null and _player_snake.alive:

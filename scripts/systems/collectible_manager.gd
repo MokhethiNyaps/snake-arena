@@ -248,6 +248,16 @@ func get_motes_near(pos: Vector3, radius: float) -> Array[Dictionary]:
 	return top
 
 
+## §10 MAGNET: moves a live collectible; the hash insert handles the
+## cross-cell move (SpatialHash.insert re-keys on cell change).
+func move_collectible(id: int, new_pos: Vector3) -> void:
+	var node: CollectibleNode = _alive.get(id) as CollectibleNode
+	if node == null or node.consumed:
+		return
+	_hash.insert(id, new_pos)
+	node.global_position = new_pos
+
+
 ## Debug/test aid: removes every live collectible and active VFX instantly.
 func clear_all() -> void:
 	for id in _alive.keys():

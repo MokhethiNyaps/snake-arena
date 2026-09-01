@@ -474,7 +474,57 @@ func _physics_process(delta: float) -> void:
 			if _phase_waited_s() > 10.0:
 				_fail("AI respawn never completed (count=%d)" % _arena.ai_director.get_ai_count())
 				return
-		20:  # DIE: shrink the player, grow one AI, drive head into its body
+		20:  # VERBS: power-up pickup, cap, refresh, stat multipliers
+			if _phase_frames == 1:
+				_phase_wall_start = Time.get_ticks_msec()
+				var pm: PowerUpManager = _arena.powerup_manager
+				if pm == null or pm.alive_pickup_count() < 1:
+					_fail("no power-ups alive (count=%d)" % (pm.alive_pickup_count() if pm else -1))
+					return
+				# Spawn SURGE exactly under the head: the next pickup tick
+				# consumes it (overlap is immediate).
+				pm.spawn_at(_snake.global_position, PowerUpDef.Effect.SURGE)
+				await get_tree().create_timer(0.6, true).timeout
+				var active: int = pm.active_count(_snake)
+				var mult: float = _snake.stat_stack.get_multiplier(SnakeController.STAT_SPEED)
+				print("CC_VERIFY_POWERUP surge_active=%d speed_mult=%.2f pickups=%d" % [
+					active, mult, pm.alive_pickup_count()])
+				if active < 1 or absf(mult - 1.35) > 0.01:
+					_fail("surge pickup failed (active=%d mult=%.2f)" % [active, mult])
+					return
+				# Cap-3: three more types → SURGE (oldest) is evicted.
+				pm.apply(_snake, pm.table.get_def(PowerUpDef.Effect.MAGNET))
+				pm.apply(_snake, pm.table.get_def(PowerUpDef.Effect.AEGIS))
+				pm.apply(_snake, pm.table.get_def(PowerUpDef.Effect.CHILL))
+				var capped: int = pm.active_count(_snake)
+				var capped_ok: bool = capped == pm.table.max_active_powerups
+				# Refresh: re-apply SURGE (evicts MAGNET, count stays 3, and
+				# SURGE's remaining time is longer than the stale -1).
+				var before_refresh: float = pm.effect_remaining(_snake, PowerUpDef.Effect.SURGE)
+				pm.apply(_snake, pm.table.get_def(PowerUpDef.Effect.SURGE))
+				var after_refresh: float = pm.effect_remaining(_snake, PowerUpDef.Effect.SURGE)
+				var refresh_ok: bool = pm.active_count(_snake) == 3 and after_refresh > before_refresh
+				# Aegis consult WHILE active: consume once, then gone.
+				var aegis_ok: bool = pm.has_aegis(_snake) and not pm.has_aegis(_snake)
+				# Doubler last (its apply may evict whatever is oldest).
+				pm.apply(_snake, pm.table.get_def(PowerUpDef.Effect.DOUBLER))
+				var mult2: float = pm.collect_multiplier(_snake)
+				print("CC_VERIFY_POWERUP2 cap=%d/%d capped=%s refresh=%.2f->%.2f doubler=%.1f aegis=%s" % [
+					capped, pm.table.max_active_powerups, capped_ok, before_refresh, after_refresh, mult2, aegis_ok])
+				if not (capped_ok and refresh_ok and absf(mult2 - 2.0) < 0.01 and aegis_ok):
+					_fail("cap/refresh/doubler/aegis checks failed")
+					return
+				_enter_phase(21)
+			if _phase_waited_s() > 8.0:
+				_fail("powerup scenario never resolved")
+				return
+		21:  # settle, then Phase 7 verdict → death scenario
+			if _phase_frames == 1:
+				_phase_wall_start = Time.get_ticks_msec()
+			if _phase_waited_s() >= 0.5:
+				print("CC_VERIFY_PHASE7_PASS")
+				_enter_phase(22)
+		22:  # DIE: shrink the player, grow one AI, drive head into its body
 			if _phase_frames == 1:
 				_phase_wall_start = Time.get_ticks_msec()
 				_snake.remove_meta("invulnerable_until")
@@ -482,7 +532,14 @@ func _physics_process(delta: float) -> void:
 				_snake.power = 2.0
 				_snake._update_derived_stats()
 				_snake._sync_segment_target()
-				var big: SnakeController = _arena.ai_director.ai_controllers[0].snake
+				var big: SnakeController = null
+				for ai in _arena.ai_director.ai_controllers:
+					if ai.snake != null and ai.snake.alive:
+						big = ai.snake
+						break
+				if big == null:
+					_fail("no live AI for the death scenario")
+					return
 				big.power = 120.0
 				big._update_derived_stats()
 				big._sync_segment_target()
@@ -496,11 +553,11 @@ func _physics_process(delta: float) -> void:
 				_die_seen = true
 				print("CC_VERIFY_PLAYER_DIED state=%s" % GameManager.state_name())
 			if _die_seen and GameManager.is_in(GameManager.State.GAME_OVER):
-				_enter_phase(21)
+				_enter_phase(23)
 			if _phase_waited_s() > 15.0:
 				_fail("death scenario never resolved (state=%s alive=%s)" % [GameManager.state_name(), _snake.alive])
 				return
-		21:  # settle, then final verdict + screenshot
+		23:  # settle, then final verdict + screenshot
 			if _phase_frames == 1:
 				_phase_wall_start = Time.get_ticks_msec()
 			if _phase_waited_s() >= 0.8:
@@ -645,6 +702,10 @@ func _checks_ai_window() -> void:
 		# Wall-time allowance (hit-stop dilutes per-tick distance): 2 u/s
 		# tracked, floor 20 — a healthy snake does 7.6+ u/s.
 		var wall_s: float = float(Time.get_ticks_msec() - int(_ai_track_start_ms.get(id, Time.get_ticks_msec()))) / 1000.0
+		# Fresh spawns (< 1 s tracked) are exempt: they may land mid
+		# hit-stop or still be settling from the spawn stagger.
+		if wall_s < 1.0:
+			continue
 		var needed: float = minf(20.0, wall_s * 2.0)
 		if float(_ai_path.get(id, 0.0)) < needed:
 			_fail("AI %s travelled only %.1f units (%.1fs tracked, needed %.1f)" % [
