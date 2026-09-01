@@ -1,0 +1,16 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://scripts/player/player_controller.gd" id="1"]
+[ext_resource type="PackedScene" path="res://scenes/snake/snake.tscn" id="2"]
+[ext_resource type="PackedScene" path="res://scenes/snake/camera_rig.tscn" id="3"]
+[ext_resource type="Resource" path="res://resources/config/snake_player.tres" id="4"]
+[ext_resource type="Resource" path="res://resources/config/camera_default.tres" id="5"]
+
+[node name="Player" type="Node3D"]
+script = ExtResource("1")
+
+[node name="Snake" parent="." instance=ExtResource("2")]
+config = ExtResource("4")
+
+[node name="CameraRig" parent="." instance=ExtResource("3")]
+profile = ExtResource("5")

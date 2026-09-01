@@ -1,0 +1,25 @@
+[gd_resource type="Resource" script_class="CameraProfile" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/systems/camera_profile.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+pitch_start_deg = -58.0
+pitch_max_deg = -68.0
+dist_base = 17.0
+dist_power = 11.0
+dist_exponent = 0.3
+dist_min = 17.0
+dist_max = 62.0
+lookahead_base = 3.5
+lookahead_speed_factor = 0.22
+lookahead_boost_scale = 0.4
+smoothing_half_life = 0.12
+fov_base = 55.0
+fov_max = 72.0
+fov_boost_add = 6.0
+mobile_multiplier = 1.12
+trauma_decay = 1.4
+shake_max_angle_deg = 2.5
+shake_max_offset = 0.5
+shake_intensity = 1.0

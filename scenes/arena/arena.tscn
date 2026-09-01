@@ -96,7 +96,3 @@ directional_shadow_max_distance = 200.0
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="."]
 environment = SubResource("env")
-
-[node name="ArenaCamera" type="Camera3D" parent="."]
-fov = 55.0
-transform = Transform3D(1, 0, 0, 0, 0.533993, 0.845489, 0, -0.845489, 0.533993, 0, 95, 60)

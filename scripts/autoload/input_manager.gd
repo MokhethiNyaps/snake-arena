@@ -71,6 +71,11 @@ func set_suspended(suspended: bool) -> void:
 		_was_boosting = false
 
 
+## True while input is centrally suspended (§7).
+func is_suspended() -> bool:
+	return _suspended
+
+
 ## Test/editor hook: force a scheme (auto-detection lands in Phase 2).
 func set_scheme_for_test(scheme: Scheme) -> void:
 	_active_scheme = scheme

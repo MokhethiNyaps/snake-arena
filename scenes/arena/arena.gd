@@ -11,13 +11,10 @@ extends Node3D
 @onready var ground: MeshInstance3D = $Ground
 @onready var boundary: MeshInstance3D = $Boundary
 @onready var soft_zone_ring: MeshInstance3D = $SoftZoneRing
-@onready var arena_camera: Camera3D = $ArenaCamera
 
 
 func _ready() -> void:
-	# Phase-1 camera placement; Phase 2 introduces CameraRig + spring damping.
-	arena_camera.make_current()
-	arena_camera.look_at(Vector3.ZERO)
+	# The CameraRig (player scene) owns the camera from Phase 2 on.
 	print("ARENA_READY")
 
 

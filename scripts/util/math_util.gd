@@ -43,3 +43,8 @@ static func xz_direction_to_angle_deg(dir: Vector3) -> float:
 static func angle_deg_to_xz_direction(angle_deg: float) -> Vector3:
 	var rad: float = deg_to_rad(angle_deg)
 	return Vector3(sin(rad), 0.0, cos(rad)).normalized()
+
+
+## Cubic ease-out (0..1). Used for segment grow/shrink eases.
+static func ease_out_cubic(t: float) -> float:
+	return 1.0 - pow(1.0 - clampf(t, 0.0, 1.0), 3.0)
