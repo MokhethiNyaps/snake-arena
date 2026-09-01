@@ -129,15 +129,16 @@ func find_valid_collectible_position() -> Vector3:
 	return _candidates[start]
 
 
-## AI spawn point (§11: 22 from player, 45 from... the §11 table says
-## min_spawn_distance_from_player = 22 for AI, and ai_min_spawn_distance 45
-## is the respawn rule "at least 45 units from the player" — both apply:
-## respawn uses 45). Phase 5 consumes this; the math lives here now.
-func find_ai_spawn_position() -> Vector3:
+## AI spawn point (§11: 22 from player general rule; respawns use 45 —
+## "at least 45 units from the player"; initial spawns use 35 for the
+## §3.6 free-growth window). Caller passes the required minimum distance.
+func find_ai_spawn_position(min_player_dist: float = -1.0) -> Vector3:
+	if min_player_dist < 0.0:
+		min_player_dist = balance.ai_min_spawn_distance
 	var radius: float = balance.arena_radius - 4.0
 	for attempt in balance.spawn_retry_attempts:
 		var pos: Vector3 = _random_ring_pos(radius)
-		if _pos_valid(pos, balance.ai_min_spawn_distance):
+		if _pos_valid(pos, min_player_dist):
 			return pos
 	return _candidates[_rng.randi() % _candidates.size()]
 

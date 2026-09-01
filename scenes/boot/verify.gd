@@ -37,6 +37,11 @@ var _ad_contract_ok: bool = false
 var _ad_rewarded_ok: bool = false
 var _ad_timeout_ok: bool = false
 var _panel_was_visible: bool = false
+# Phase 5 (AI opponents) scenario state.
+var _ai_start_pos: Dictionary = {}
+var _ai_seen_states: Dictionary = {}
+var _ai_path: Dictionary = {}
+var _ai_last_pos: Dictionary = {}
 
 var _max_frame_ms: float = 0.0
 var _frame_samples: int = 0
@@ -269,9 +274,41 @@ func _physics_process(delta: float) -> void:
 			if _phase_frames > 400:
 				_fail("timeout ad phase timed out")
 				return
-		14:  # settle, then final verdict + screenshot
+		14:  # settle, then ad-scenario checks, then the AI scenario (Phase 5)
 			if _phase_frames >= 20:
 				_checks_ads()
+		15:  # record the AI population baseline (§11: 8 AI, unique names)
+			if _phase_frames == 1:
+				var director: AIDirector = _arena.ai_director
+				if director == null or director.get_ai_count() != director.balance.ai_count:
+					_fail("expected %d AI, found %d" % [director.balance.ai_count if director else 0, director.get_ai_count() if director else -1])
+					return
+				var names: Dictionary = {}
+				for ai in director.ai_controllers:
+					if names.has(ai.display_name):
+						_fail("AI name reused in match: %s" % ai.display_name)
+						return
+					names[ai.display_name] = true
+					var id: int = ai.get_instance_id()
+					_ai_start_pos[id] = ai.snake.global_position
+					_ai_last_pos[id] = ai.snake.global_position
+					_ai_path[id] = 0.0
+					_ai_seen_states[str(ai._fsm.current_name())] = true
+				print("CC_VERIFY_AI_SPAWNED count=%d names=%s" % [director.get_ai_count(), ", ".join(names.keys())])
+				_enter_phase(16)
+		16:  # watch the AI play for 300 ticks (5 s): sample states every 60
+			for ai in _arena.ai_director.ai_controllers:
+				var id: int = ai.get_instance_id()
+				_ai_path[id] = float(_ai_path[id]) + ai.snake.global_position.distance_to(_ai_last_pos[id])
+				_ai_last_pos[id] = ai.snake.global_position
+			if _phase_frames % 60 == 0:
+				for ai in _arena.ai_director.ai_controllers:
+					_ai_seen_states[str(ai._fsm.current_name())] = true
+			if _phase_frames >= 300:
+				_checks_ai_window()
+		17:  # settle, then final verdict + screenshot
+			if _phase_frames >= 30:
+				_checks_ai_final()
 
 
 func _enter_phase(p: int) -> void:
@@ -376,12 +413,11 @@ func _checks_economy() -> void:
 
 ## Phase 4 ad-scaffolding exit criteria (§48: trigger a mock ad from the
 ## debug panel at any time; the game pauses and resumes perfectly,
-## including on forced timeout) + the cross-phase frame-budget/framing
-## checks + screenshot.
+## including on forced timeout). Passes → the run continues into the
+## Phase 5 AI scenario.
 func _checks_ads() -> void:
 	if _finished:
 		return
-	_finished = true
 	if not _panel_was_visible:
 		_fail("debug ad panel did not toggle")
 		return
@@ -391,9 +427,57 @@ func _checks_ads() -> void:
 	if not _ad_timeout_ok:
 		_fail("forced-timeout watchdog flow failed")
 		return
+	print("CC_VERIFY_PHASE4_PASS rewarded=%s timeout=%s contract=%s" % [
+		_ad_rewarded_ok, _ad_timeout_ok, _ad_contract_ok])
+	_enter_phase(15)
+
+
+## Phase 5 window checks (§48: AI play competently, visibly differ in
+## behaviour, and cost < 2.5 ms/frame).
+func _checks_ai_window() -> void:
+	var director: AIDirector = _arena.ai_director
+	# Every AI kept moving (path length, not displacement — a high-turn-rate
+	# snake legitimately coils; the Phase 2 player check hit the same trap).
+	for ai in director.ai_controllers:
+		var id: int = ai.get_instance_id()
+		if float(_ai_path[id]) < 20.0:
+			_fail("AI %s travelled only %.1f units in 5s" % [ai.display_name, float(_ai_path[id])])
+			return
+	# At least two AI have grown past the starting-power spread (they
+	# collected from the economy).
+	var grown: int = 0
+	var powers: Array[float] = []
+	for ai in director.ai_controllers:
+		powers.append(ai.snake.power)
+		if ai.snake.power > director.balance.ai_start_power_max:
+			grown += 1
+	if grown < 2:
+		_fail("only %d AI grew past start-power spread (powers=%s)" % [grown, str(powers)])
+		return
+	# Visibly different behaviour: multiple FSM states across the window.
+	if _ai_seen_states.size() < 3:
+		_fail("state diversity too low: %s" % str(_ai_seen_states.keys()))
+		return
+	print("CC_VERIFY_AI_WINDOW states=%s powers=%s ai_ms_max=%.2f" % [
+		str(_ai_seen_states.keys()), str(powers), director.ai_ms_max])
+	_enter_phase(17)
+
+
+## Phase 5 exit criteria + the cross-phase frame-budget/framing checks +
+## screenshot.
+func _checks_ai_final() -> void:
+	if _finished:
+		return
+	_finished = true
+	var director: AIDirector = _arena.ai_director
+	# §8.5 hard budget: all AI combined < 2.5 ms/frame (CPU decision cost —
+	# measured on the sandbox CPU, not GPU-bound like frame time).
+	if director.ai_ms_max >= director.balance.ai_frame_budget_ms:
+		_fail("AI budget blown: max %.2f ms/frame (budget %.2f)" % [director.ai_ms_max, director.balance.ai_frame_budget_ms])
+		return
 	# Frame budget across ALL scenarios (worst case: 420 collectibles +
-	# VFX + 60-segment snake + ad overlay). Regression threshold 20 ms
-	# (llvmpipe — real 16.7 ms target is human-verified, decision #11).
+	# 60-segment snake + 8 AI + ad overlay). 20 ms llvmpipe regression
+	# threshold (decision #11).
 	if _max_frame_ms > 20.0:
 		_fail("frame budget blown: max %.1f ms (avg %.1f)" % [_max_frame_ms, _frame_acc_ms / maxf(1.0, float(_frame_samples))])
 		return
@@ -410,8 +494,9 @@ func _checks_ads() -> void:
 	if not on_screen:
 		_fail("snake head is off-screen at %s" % head_screen)
 		return
-	print("CC_VERIFY_PHASE4_PASS rewarded=%s timeout=%s contract=%s" % [
-		_ad_rewarded_ok, _ad_timeout_ok, _ad_contract_ok])
+	print("CC_VERIFY_PHASE5_PASS ai=%d states=%s ai_ms_max=%.2f budget=%.2f" % [
+		director.get_ai_count(), str(_ai_seen_states.keys()),
+		director.ai_ms_max, director.balance.ai_frame_budget_ms])
 	# Screenshot (skipped in headless mode — no renderer).
 	if not DisplayServer.get_name() == "headless":
 		await RenderingServer.frame_post_draw

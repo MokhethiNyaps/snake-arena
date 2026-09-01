@@ -225,6 +225,29 @@ func mote_count() -> int:
 	return count
 
 
+## §8 SCAVENGE: the TOP-3 corpse motes within `radius` of `pos` (by power),
+## as [{pos: Vector3, power: float}]. PERF (§8.5): avoids a sort_custom
+## lambda allocation per call; scavenging only ever targets the best few.
+func get_motes_near(pos: Vector3, radius: float) -> Array[Dictionary]:
+	var ids: Array[int] = _hash.query_radius(pos, radius)
+	var top: Array[Dictionary] = []
+	for id in ids:
+		var node: CollectibleNode = _alive.get(id) as CollectibleNode
+		if node == null or node.consumed or node.def.type != CollectibleDef.Type.CORPSE_MOTE:
+			continue
+		var entry: Dictionary = {"pos": node.global_position, "power": node.power_value}
+		var inserted: bool = false
+		for i in range(top.size() - 1, -1, -1):
+			if node.power_value <= float(top[i]["power"]):
+				if top.size() < 3:
+					top.insert(i + 1, entry)
+				inserted = true
+				break
+		if not inserted and top.size() < 3:
+			top.insert(0, entry)
+	return top
+
+
 ## Debug/test aid: removes every live collectible and active VFX instantly.
 func clear_all() -> void:
 	for id in _alive.keys():

@@ -63,6 +63,47 @@ extends Resource
 ## Power-ups alive at steady state.
 @export var powerup_target_count: int = 5
 
+@export_group("AI opponents (§8)")
+## Initial AI spawn must be at least this far from the player (the §3.6
+## free-growth window: no AI within 35 units of spawn for 0-20 s).
+@export var ai_initial_spawn_distance: float = 35.0
+## Starting power spread for AI (§8.4: difficulty via mix + starting power;
+## rubber-banding is forbidden).
+@export var ai_start_power_min: float = 2.0
+@export var ai_start_power_max: float = 5.0
+## Personality mix across the 8 AI (spawn order). Names must match the
+## .tres files in resources/ai/.
+@export var ai_personality_mix: Array[String] = [
+	"Aggressive", "Collector", "Explorer", "Aggressive",
+	"Defensive", "Collector", "Opportunist", "Explorer",
+]
+## Decision cadence near the player (§8.5): decide at this Hz.
+@export var ai_decide_rate_hz: float = 10.0
+## Distant-AI LOD (§8.5): beyond this distance from the player, decisions
+## drop to ai_far_decide_rate_hz, body updates stride, MultiMesh culled.
+@export var ai_lod_distance: float = 90.0
+@export var ai_far_decide_rate_hz: float = 3.0
+## Body-position updates every Nth physics tick for distant AI.
+@export var ai_far_body_stride: int = 3
+## Hard budget: all AI combined per frame (ms) — asserted by the verify
+## harness and reported in the final report (§8.5).
+@export var ai_frame_budget_ms: float = 2.5
+## RECOVER state: below this fraction of peak power, play safe.
+@export var ai_recover_power_fraction: float = 0.4
+## RECOVER only triggers once peak power exceeded this (spawn jitter guard).
+@export var ai_recover_peak_min: float = 20.0
+## RECOVER duration (seconds).
+@export var ai_recover_duration: float = 5.0
+## SCAVENGE: rush motes within this radius.
+@export var ai_scavenge_radius: float = 40.0
+## AVOID_BODY probe: seconds of travel probed ahead for body collisions.
+@export var ai_probe_lookahead: float = 1.0
+## §8.4 aim error resample interval (seconds) — smoothed, never per-frame.
+@export var ai_aim_error_resample: float = 0.4
+## §8.4 blunder evaluation interval (seconds) and hold time.
+@export var ai_blunder_interval: float = 2.0
+@export var ai_blunder_hold: float = 0.5
+
 @export_group("Scoring & combo (§12.3)")
 ## Combo window: a collect within this many seconds of the previous one
 ## increments the combo.

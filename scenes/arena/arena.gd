@@ -15,6 +15,7 @@ extends Node3D
 var collectible_manager: CollectibleManager = null
 var spawn_manager: SpawnManager = null
 var score_manager: ScoreManager = null
+var ai_director: AIDirector = null
 
 var _player_snake: SnakeController = null
 
@@ -31,6 +32,12 @@ func _ready() -> void:
 	score_manager = ScoreManager.new()
 	score_manager.name = "ScoreManager"
 	add_child(score_manager)
+	ai_director = AIDirector.new()
+	ai_director.name = "AIDirector"
+	add_child(ai_director)
+	ai_director.collectibles = collectible_manager
+	ai_director.spawn_manager = spawn_manager
+	ai_director.arena_owner = self
 	EventBus.game_state_changed.connect(_on_state_changed)
 	print("ARENA_READY")
 
@@ -40,6 +47,7 @@ func _ready() -> void:
 func setup_world(player_root: Node3D, snake: SnakeController) -> void:
 	_player_snake = snake
 	spawn_manager.player_snake = snake
+	ai_director.player_snake = snake
 	snake.boost_mote_emitted.connect(_on_boost_mote)
 	if player_root is PlayerController:
 		(player_root as PlayerController).setup_economy(collectible_manager, score_manager, spawn_manager)
@@ -64,6 +72,7 @@ func _physics_process(delta: float) -> void:
 	collectible_manager.tick(delta)
 	spawn_manager.tick(delta)
 	spawn_manager.top_up()
+	ai_director.tick(delta)
 	if _player_snake != null and _player_snake.alive:
 		score_manager.tick(delta)
 

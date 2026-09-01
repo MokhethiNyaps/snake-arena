@@ -61,6 +61,10 @@ var _mote_accumulator: float = 0.0
 var _can_read_input: bool = false
 var _segments_target: int = 6
 var _segments_current: int = 0
+## §8.5 LOD: body-position updates every Nth physics tick (1 = every tick;
+## distant AI use ai_far_body_stride).
+var body_tick_stride: int = 1
+var _body_tick_counter: int = 0
 ## The distance-sampled trail. Capacity = max_history_points (§6.2).
 var history: PositionHistory = null
 
@@ -88,7 +92,11 @@ func _physics_process(delta: float) -> void:
 	_tick_movement(delta)
 	_tick_boost(delta)
 	_update_derived_stats()
-	body.tick()
+	# §8.5 LOD: distant AI update body positions every Nth tick.
+	_body_tick_counter += 1
+	if _body_tick_counter >= body_tick_stride:
+		_body_tick_counter = 0
+		body.tick()
 
 
 ## Player/AI steering API: a world-space XZ point to head toward. ZERO
@@ -107,6 +115,11 @@ func set_boost(active: bool) -> void:
 
 func head_position() -> Vector3:
 	return global_position
+
+
+## Unit XZ vector of the current facing angle (0 = +Z, positive toward +X).
+func facing_vector() -> Vector3:
+	return Vector3(sin(deg_to_rad(facing_angle_deg)), 0.0, cos(deg_to_rad(facing_angle_deg)))
 
 
 func head_forward() -> Vector3:

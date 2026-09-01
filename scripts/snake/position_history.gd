@@ -109,6 +109,21 @@ func read_at_arc(target_arc: float, cursor_idx: int) -> Vector3:
 	return _positions[c.index].lerp(_positions[next_idx2], f)
 
 
+## Raw trail walk for cheap probes (§8 AI body avoidance): appends up to
+## `max_count` evenly-spaced samples (newest-first) to `out`, WITHOUT
+## touching cursors. Direct ring reads — no side effects, O(n) array reads.
+func trail_samples(out: Array, max_count: int) -> void:
+	out.clear()
+	if count == 0:
+		return
+	var idx: int = _wrap(head_index - 1)
+	var remaining: int = count
+	while remaining > 0 and out.size() < max_count:
+		out.append(_positions[idx])
+		idx = _wrap(idx - 1)
+		remaining -= 1
+
+
 func get_sample(index: int) -> Vector3:
 	return _positions[index]
 
