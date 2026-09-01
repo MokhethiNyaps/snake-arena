@@ -21,8 +21,8 @@ var head_mesh: MeshInstance3D = null
 
 var _target_count: int = 6
 var _count: int = 0
-## MultiMesh TRANSFORM_3D buffer: 12 floats per instance
-## (basis x, basis y, basis z, origin).
+## MultiMesh TRANSFORM_3D buffer: 16 floats per instance in Godot 4.7
+## (decision #17 — a 12-float buffer is rejected by the engine).
 var _transforms: PackedFloat32Array = PackedFloat32Array()
 var _colours: PackedColorArray = PackedColorArray()
 var _growing: Array[float] = []   # per-slot grow timer (-1 = settled)
@@ -84,6 +84,7 @@ func spawn_segments(count: int) -> void:
 		_shrinking.append(-1.0)
 		_write_instance(i, spawn_pos, controller.current_radius)
 	mmi.multimesh.visible_instance_count = count
+	_upload_buffers()
 
 
 ## Per-physics-tick body update: every segment reads its arc-length slot
@@ -119,6 +120,8 @@ func tick() -> void:
 	# Shrink: pending slots scale down over SEGMENT_SHRINK_TIME then vanish.
 	if _count > _target_count:
 		_shrink_step(radius, elapsed)
+	# One upload per tick, no matter how many segments changed.
+	_upload_buffers()
 	# Head visual rides the controller at 1.15x body radius, tinted by the
 	# power-tier band colour.
 	if head_mesh != null:
@@ -196,6 +199,12 @@ func _write_transform(index: int, pos: Vector3, radius: float) -> void:
 	_transforms[base + 13] = 0.0
 	_transforms[base + 14] = pos.z
 	_transforms[base + 15] = 1.0
+
+
+## Uploads the accumulated transform buffer once per tick (called by tick()
+## and spawn_segments()) — per-write uploads would re-send the whole
+## 240-instance buffer for every segment, every tick (§19 upload churn).
+func _upload_buffers() -> void:
 	mmi.multimesh.buffer = _transforms
 	mmi.multimesh.color_array = _colours
 

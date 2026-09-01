@@ -18,6 +18,9 @@ var _heading_frames: int = 0
 var _boost_frames: int = 0
 var _boost_start_power: float = 0.0
 var _start_pos: Vector3 = Vector3.ZERO
+var _big_start_pos: Vector3 = Vector3.ZERO
+var _path_length: float = 0.0
+var _last_head_pos: Vector3 = Vector3.ZERO
 var _fail_reason: String = ""
 
 var _max_frame_ms: float = 0.0
@@ -58,6 +61,12 @@ func _physics_process(delta: float) -> void:
 	_frame_acc_ms += frame_ms
 	_frame_samples += 1
 	_max_frame_ms = maxf(_max_frame_ms, frame_ms)
+	# Path-length accumulation (head velocity integrated per frame).
+	if _phase >= 5 and _snake != null:
+		_path_length += _snake.global_position.distance_to(_last_head_pos)
+		_last_head_pos = _snake.global_position
+	elif _snake != null:
+		_last_head_pos = _snake.global_position
 	match _phase:
 		0:  # settle: 30 ticks (0.5 s)
 			if _phase_frames >= 30:
@@ -82,9 +91,35 @@ func _physics_process(delta: float) -> void:
 			if _boost_frames >= 90:
 				Input.parse_input_event(_key(KEY_SPACE, false))
 				_enter_phase(3)
-		3:  # settle after boost, then final checks
+		3:  # settle after boost, then small-snake checks
 			if _phase_frames >= 30:
-				_final_checks()
+				_checks_small()
+		4:  # grow to 60 segments (phase exit criterion): pump power to 190
+			# (formula: 6 + floor(190/3.5) = 60), then wait for the +1
+			# segment/tick growth plus per-segment ease-in to settle.
+			if _phase_frames == 1:
+				_snake.add_power(190.0 - _snake.power)
+			if _phase_frames >= 90:
+				var want: int = _snake._segments_for_power(_snake.power)
+				if _snake.get_segment_count() != want:
+					_fail("60-segment growth stalled: %d != %d (power=%.1f)" % [
+						_snake.get_segment_count(), want, _snake.power])
+					return
+				print("CC_VERIFY_BIG segs=%d power=%.1f" % [_snake.get_segment_count(), _snake.power])
+				_enter_phase(5)
+		5:  # weave the 60-segment snake for 180 ticks (3 s): right, then left
+			if _phase_frames == 1:
+				_big_start_pos = _snake.global_position
+				_path_length = 0.0
+				_last_head_pos = _snake.global_position
+			Input.parse_input_event(_key(KEY_D if _phase_frames <= 90 else KEY_A, true))
+			Input.parse_input_event(_key(KEY_A if _phase_frames <= 90 else KEY_D, false))
+			if _phase_frames >= 180:
+				Input.parse_input_event(_key(KEY_A, false))
+				_enter_phase(6)
+		6:  # settle, then big-snake checks + screenshot + verdict
+			if _phase_frames >= 30:
+				_checks_big()
 
 
 func _enter_phase(p: int) -> void:
@@ -99,11 +134,9 @@ func _key(key: int, pressed: bool) -> InputEventKey:
 	return ev
 
 
-## The Phase 2 exit criteria, asserted on the live game.
-func _final_checks() -> void:
-	if _finished:
-		return
-	_finished = true
+## Small-snake exit criteria (movement, boost drain, body trail, camera,
+## §3.2 segment formula). Passes → continue to the 60-segment scenario.
+func _checks_small() -> void:
 	# 1. Snake moved meaningfully while steering right.
 	var moved: float = _snake.global_position.distance_to(Vector3.ZERO)
 	if moved < 20.0:
@@ -137,8 +170,34 @@ func _final_checks() -> void:
 		_fail("segment count %d != expected %d at power %.1f" % [
 			_snake.get_segment_count(), expected_segs, _snake.power])
 		return
-	# 6. Framing debug: where does the snake sit on screen? (kept as a
-	# regression aid — the head must be inside the viewport, near centre).
+	_enter_phase(4)
+
+
+## 60-segment exit criteria (§48 Phase 2: "drive a 60-segment snake around
+## at 60 FPS"). Frame budget uses a 20 ms regression threshold — the
+## sandbox runs llvmpipe software rendering (decision #11), so the real
+## 16.7 ms target is human-verified on hardware (docs/HUMAN_TASKS.md).
+func _checks_big() -> void:
+	if _finished:
+		return
+	_finished = true
+	# 6. The big snake keeps moving (path length, not displacement — a
+	# high-turn-rate snake legitimately coils into tight circles).
+	if _path_length < 15.0:
+		_fail("60-segment snake travelled only %.1f units in 3s (expected ~%.1f at speed %.2f)" % [
+			_path_length, 3.0 * _snake.current_speed, _snake.current_speed])
+		return
+	# 7. Segment count still follows the formula at 60 segments.
+	var expected_big: int = _snake._segments_for_power(_snake.power)
+	if _snake.get_segment_count() != expected_big:
+		_fail("big segment count %d != expected %d" % [_snake.get_segment_count(), expected_big])
+		return
+	# 8. Frame budget: no frame over the regression threshold across BOTH
+	# scenarios (worst case = the 60-segment MultiMesh updates).
+	if _max_frame_ms > 20.0:
+		_fail("frame budget blown: max %.1f ms (avg %.1f)" % [_max_frame_ms, _frame_acc_ms / maxf(1.0, float(_frame_samples))])
+		return
+	# 9. Framing: the 60-segment head must project on-screen, near centre.
 	var view_cam2: Camera3D = get_viewport().get_camera_3d()
 	var head_screen: Vector2 = view_cam2.unproject_position(_snake.head_position())
 	var on_screen: bool = (
@@ -151,7 +210,7 @@ func _final_checks() -> void:
 	if not on_screen:
 		_fail("snake head is off-screen at %s" % head_screen)
 		return
-	# 7. Screenshot (skipped in headless mode — no renderer).
+	# 10. Screenshot (skipped in headless mode — no renderer).
 	if not DisplayServer.get_name() == "headless":
 		await RenderingServer.frame_post_draw
 		var img: Image = get_viewport().get_texture().get_image()
@@ -160,9 +219,9 @@ func _final_checks() -> void:
 
 
 func _win() -> void:
-	print("CC_VERIFY_PASS moved=%.1f power=%.1f speed=%.2f segs=%d max_frame_ms=%.1f avg_frame_ms=%.1f" % [
+	print("CC_VERIFY_PASS moved=%.1f power=%.1f speed=%.2f segs=%d path_3s=%.1f max_frame_ms=%.1f avg_frame_ms=%.1f" % [
 		_snake.global_position.distance_to(Vector3.ZERO), _snake.power,
-		_snake.current_speed, _snake.get_segment_count(), _max_frame_ms,
+		_snake.current_speed, _snake.get_segment_count(), _path_length, _max_frame_ms,
 		_frame_acc_ms / maxf(1.0, float(_frame_samples))])
 	get_tree().quit(0)
 
