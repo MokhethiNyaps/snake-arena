@@ -1,7 +1,7 @@
 extends Node3D
-## Phase 2 verification harness. Runs the REAL arena + player scenes and
+## Phases 2+3 verification harness. Runs the REAL arena + player scenes and
 ## drives them with simulated input (Input.parse_input_event), asserting
-## the phase's exit criteria and saving a screenshot.
+## each phase's exit criteria and saving a screenshot.
 ##
 ## Run:  xvfb-run -a -s "-screen 0 1280x720x24" \
 ##         godot --path . --resolution 1280x720 res://scenes/boot/verify.tscn
@@ -22,6 +22,15 @@ var _big_start_pos: Vector3 = Vector3.ZERO
 var _path_length: float = 0.0
 var _last_head_pos: Vector3 = Vector3.ZERO
 var _fail_reason: String = ""
+# Phase 3 (economy) scenario state.
+var _econ_power_before: float = 0.0
+var _econ_score_before: float = 0.0
+var _econ_absorb_count: int = 0
+var _econ_motes_before: int = 0
+var _econ_boost_start: float = 0.0
+## Minimum power observed while the boost key was held (drain evidence even
+## if incidental collects raise power mid-boost).
+var _min_power_during_boost: float = 0.0
 
 var _max_frame_ms: float = 0.0
 var _frame_samples: int = 0
@@ -43,6 +52,8 @@ func _build_world() -> void:
 	_snake = _player.get_node("Snake")
 	_rig = _player.get_node("CameraRig")
 	_rig.set_target(_snake)
+	# Phase 3: wire the economy exactly like boot.gd does.
+	_arena.setup_world(_player, _snake)
 	GameManager.request_state(GameManager.State.PLAYING)
 	# Player starts at origin; give the rig a frame to snap.
 	print("CC_VERIFY_START")
@@ -83,8 +94,10 @@ func _physics_process(delta: float) -> void:
 			if _boost_frames == 0:
 				_snake.add_power(10.0)
 				_boost_start_power = _snake.power
+				_min_power_during_boost = _snake.power
 			Input.parse_input_event(_key(KEY_SPACE, true))
 			_boost_frames += 1
+			_min_power_during_boost = minf(_min_power_during_boost, _snake.power)
 			if _snake != null and not _snake.boosting and _boost_frames > 10:
 				_fail("boost did not engage (power=%.1f min=%.1f)" % [_snake.power, _snake.config.min_boost_power])
 				return
@@ -117,9 +130,52 @@ func _physics_process(delta: float) -> void:
 			if _phase_frames >= 180:
 				Input.parse_input_event(_key(KEY_A, false))
 				_enter_phase(6)
-		6:  # settle, then big-snake checks + screenshot + verdict
+		6:  # settle, then big-snake checks + economy scenario (Phase 3)
 			if _phase_frames >= 30:
 				_checks_big()
+		7:  # economy settle: wait for the 420 population, then plant a
+			# collectible directly ahead of the snake to guarantee a pickup
+			if _phase_frames >= 120:
+				_fail("collectible population never reached 420 (non-mote=%d)" % _arena.collectible_manager.non_mote_count())
+				return
+			if _arena.collectible_manager.non_mote_count() >= 420:
+				var cm: CollectibleManager = _arena.collectible_manager
+				var def: CollectibleDef = cm.table.get_def(CollectibleDef.Type.CELL_LARGE)
+				var fwd: Vector3 = Vector3(sin(deg_to_rad(_snake.facing_angle_deg)), 0.0, cos(deg_to_rad(_snake.facing_angle_deg)))
+				var plant_pos: Vector3 = _snake.global_position + fwd * 4.0
+				cm.spawn_collectible(def, plant_pos)
+				_econ_power_before = _snake.power
+				_econ_score_before = _arena.score_manager.get_score()
+				_enter_phase(8)
+		8:  # drive straight over the planted collectible
+			if _phase_frames >= 90:
+				var cm2: CollectibleManager = _arena.collectible_manager
+				if _snake.power < _econ_power_before + 8.0 - 0.01:
+					_fail("planted CELL_LARGE not absorbed: power %.1f -> %.1f" % [_econ_power_before, _snake.power])
+					return
+				if _arena.score_manager.get_score() < _econ_score_before + 100.0 * 1.05 - 0.01:
+					_fail("score/combo not applied: %.1f -> %.1f" % [_econ_score_before, _arena.score_manager.get_score()])
+					return
+				if _arena.score_manager.get_combo() < 1:
+					_fail("combo did not register")
+					return
+				print("CC_VERIFY_PICKUP power=%.1f score=%.1f combo=%d alive=%d" % [
+					_snake.power, _arena.score_manager.get_score(),
+					_arena.score_manager.get_combo(), cm2.non_mote_count()])
+				_enter_phase(9)
+		9:  # boost 40 ticks: §3.4 shed motes must appear behind the snake
+			if _phase_frames == 1:
+				_econ_boost_start = _snake.power
+				_min_power_during_boost = _snake.power
+				_econ_motes_before = _arena.collectible_manager.mote_count()
+			Input.parse_input_event(_key(KEY_SPACE, true))
+			_min_power_during_boost = minf(_min_power_during_boost, _snake.power)
+			if _phase_frames >= 40:
+				Input.parse_input_event(_key(KEY_SPACE, false))
+				_enter_phase(10)
+		10:  # settle, then final economy checks + screenshot + verdict
+			if _phase_frames >= 15:
+				_checks_economy()
 
 
 func _enter_phase(p: int) -> void:
@@ -142,9 +198,11 @@ func _checks_small() -> void:
 	if moved < 20.0:
 		_fail("snake moved only %.1f units in ~6s (speed=%.2f)" % [moved, _snake.current_speed])
 		return
-	# 2. Boost drained power (risk loop live).
-	if _snake.power >= _boost_start_power:
-		_fail("boost did not drain power (%.1f vs start %.1f)" % [_snake.power, _boost_start_power])
+	# 2. Boost drained power (risk loop live). The MINIMUM observed power
+	# while boosting must dip below the start value — a net comparison of
+	# start vs end can be masked by incidental collects during the boost.
+	if _min_power_during_boost >= _boost_start_power:
+		_fail("boost did not drain power (min %.1f vs start %.1f)" % [_min_power_during_boost, _boost_start_power])
 		return
 	# 3. Body follows: segment 0 trails the head by roughly one spacing.
 	var head: Vector3 = _snake.global_position
@@ -177,10 +235,10 @@ func _checks_small() -> void:
 ## at 60 FPS"). Frame budget uses a 20 ms regression threshold — the
 ## sandbox runs llvmpipe software rendering (decision #11), so the real
 ## 16.7 ms target is human-verified on hardware (docs/HUMAN_TASKS.md).
+## Passes → the run continues into the Phase 3 economy scenario.
 func _checks_big() -> void:
 	if _finished:
 		return
-	_finished = true
 	# 6. The big snake keeps moving (path length, not displacement — a
 	# high-turn-rate snake legitimately coils into tight circles).
 	if _path_length < 15.0:
@@ -192,12 +250,34 @@ func _checks_big() -> void:
 	if _snake.get_segment_count() != expected_big:
 		_fail("big segment count %d != expected %d" % [_snake.get_segment_count(), expected_big])
 		return
-	# 8. Frame budget: no frame over the regression threshold across BOTH
-	# scenarios (worst case = the 60-segment MultiMesh updates).
+	print("CC_VERIFY_PHASE2_PASS moved=%.1f power=%.1f speed=%.2f segs=%d path_3s=%.1f" % [
+		_snake.global_position.distance_to(Vector3.ZERO), _snake.power,
+		_snake.current_speed, _snake.get_segment_count(), _path_length])
+	_enter_phase(7)
+
+
+## Phase 3 economy exit criteria (§48: 420 collectibles alive, collecting
+## is satisfying, 60 FPS held) + the Phase 2 frame-budget + framing checks.
+func _checks_economy() -> void:
+	if _finished:
+		return
+	_finished = true
+	# 10. Boost shed motes (§3.4): mote count grew while boosting.
+	var cm: CollectibleManager = _arena.collectible_manager
+	if cm.mote_count() <= _econ_motes_before:
+		_fail("boost shed no motes (before=%d after=%d)" % [_econ_motes_before, cm.mote_count()])
+		return
+	# 11. Boost still drained power (min-power check — a plain start/end
+	# comparison can be masked by incidental collects during the boost).
+	if _min_power_during_boost >= _econ_boost_start:
+		_fail("economy boost did not drain (min %.2f vs start %.2f)" % [_min_power_during_boost, _econ_boost_start])
+		return
+	# 12. Frame budget across ALL scenarios (worst case: 420 collectibles
+	# + VFX + 60-segment snake). Regression threshold 20 ms (llvmpipe).
 	if _max_frame_ms > 20.0:
 		_fail("frame budget blown: max %.1f ms (avg %.1f)" % [_max_frame_ms, _frame_acc_ms / maxf(1.0, float(_frame_samples))])
 		return
-	# 9. Framing: the 60-segment head must project on-screen, near centre.
+	# 13. Framing: the head must project on-screen, near centre.
 	var view_cam2: Camera3D = get_viewport().get_camera_3d()
 	var head_screen: Vector2 = view_cam2.unproject_position(_snake.head_position())
 	var on_screen: bool = (
@@ -210,7 +290,10 @@ func _checks_big() -> void:
 	if not on_screen:
 		_fail("snake head is off-screen at %s" % head_screen)
 		return
-	# 10. Screenshot (skipped in headless mode — no renderer).
+	print("CC_VERIFY_PHASE3_PASS collectibles=%d motes=%d score=%.1f combo=%d" % [
+		cm.non_mote_count(), cm.mote_count(), _arena.score_manager.get_score(),
+		_arena.score_manager.get_combo()])
+	# 14. Screenshot (skipped in headless mode — no renderer).
 	if not DisplayServer.get_name() == "headless":
 		await RenderingServer.frame_post_draw
 		var img: Image = get_viewport().get_texture().get_image()

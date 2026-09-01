@@ -14,6 +14,17 @@ extends Node3D
 @onready var snake: SnakeController = $Snake
 @onready var camera_rig: CameraRig = $CameraRig
 
+## Economy refs, wired by arena.setup_world (Phase 3).
+var collectibles: CollectibleManager = null
+var score_mgr: ScoreManager = null
+var spawn_mgr: SpawnManager = null
+
+
+func setup_economy(cm: CollectibleManager, sm: ScoreManager, spm: SpawnManager) -> void:
+	collectibles = cm
+	score_mgr = sm
+	spawn_mgr = spm
+
 
 func _physics_process(_delta: float) -> void:
 	if snake == null or not snake.alive:
@@ -25,9 +36,37 @@ func _physics_process(_delta: float) -> void:
 		else:
 			snake.set_steer_target(Vector3.ZERO)
 		snake.set_boost(InputManager.is_boosting())
+		if collectibles != null:
+			_try_collect()
+			_try_surge_claim()
 	else:
 		snake.set_steer_target(Vector3.ZERO)
 		snake.set_boost(false)
+
+
+## §9 "Head → collectible: Absorb." Queries the collectible spatial hash
+## around the head; applies power to the snake and score/combo to the
+## ScoreManager; SFX pitch tracks the combo (§15).
+func _try_collect() -> void:
+	var radius: float = snake.current_radius + collectibles.balance.collect_radius_margin
+	var pickups: Array[Dictionary] = collectibles.collect_near(snake.global_position, radius)
+	if pickups.is_empty():
+		return
+	for p in pickups:
+		snake.add_power(float(p["power"]))
+		var steps: int = 0
+		if score_mgr != null:
+			score_mgr.on_collectible(float(p["score"]))
+			steps = score_mgr.get_combo() - 1
+		AudioManager.play_pickup(int(p["type"]), steps, snake.global_position)
+
+
+## §12.3: first snake to the Surge cluster claims +300.
+func _try_surge_claim() -> void:
+	if spawn_mgr == null or score_mgr == null:
+		return
+	if spawn_mgr.try_claim_surge(snake.global_position):
+		score_mgr.add_score(float(spawn_mgr.balance.surge_claim_score))
 
 
 ## Spawns the snake at `pos` facing `angle_deg` (used by boot / later by

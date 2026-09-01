@@ -26,6 +26,8 @@ const STAT_RADIUS: StringName = &"radius"
 signal died(snake: SnakeController)
 signal power_changed(power: float)
 signal boosted_changed(boosting: bool)
+## §3.4 — a corpse mote was shed behind the head while boosting.
+signal boost_mote_emitted(mote_position: Vector3, mote_power: float)
 
 @export var config: SnakeConfig
 @export var snake_name: String = "Snake"
@@ -52,6 +54,9 @@ var id: int = -1
 var _steer_target: Vector3 = Vector3.ZERO
 var _has_steer_target: bool = false
 var _boost_requested: bool = false
+## §3.4 mote shedding: drained power accumulates until it equals one mote's
+## worth (drain rate / motes per second), then a mote is emitted.
+var _mote_accumulator: float = 0.0
 
 var _can_read_input: bool = false
 var _segments_target: int = 6
@@ -193,15 +198,35 @@ func _tick_boost(delta: float) -> void:
 		var drain: float = config.boost_power_drain * delta
 		var new_power: float = maxf(config.min_boost_power, power - drain)
 		if new_power != power:
+			var drained: float = power - new_power
 			power = new_power
 			power_changed.emit(power)
 			TestSignalHost.relay(get_instance_id(), &"power_changed", power)
 			_update_derived_stats()
 			# §3.4: drained power is lost mass — the body shrinks (this is
-			# the risk half of the boost loop; the motes are Phase 3).
+			# the risk half of the boost loop).
 			_sync_segment_target()
-	# Mote emission (corpse_mote trail) lands in Phase 3 (economy) — the
-	# risk loop is already live via the power drain above.
+			# §3.4: ...and is shed behind the snake as corpse motes, one
+			# mote per (drain / motes_per_second) power, so the arena
+			# economy stays fed. Arena wires this to CollectibleManager.
+			_mote_accumulator += drained
+			_emit_boost_motes()
+
+
+## Emits whole motes from the accumulator. Each mote carries exactly
+## boost_power_drain / boost_motes_per_second power (conservation: shed
+## power always equals drained power, modulo one partial mote).
+func _emit_boost_motes() -> void:
+	var per_mote: float = config.boost_power_drain / maxf(0.1, config.boost_mote_emission_rate)
+	while _mote_accumulator >= per_mote:
+		_mote_accumulator -= per_mote
+		var back: Vector3 = Vector3(-sin(deg_to_rad(facing_angle_deg)), 0.0, -cos(deg_to_rad(facing_angle_deg)))
+		var lateral: Vector3 = Vector3(randf_range(-0.3, 0.3), 0.0, randf_range(-0.3, 0.3))
+		# Drop past the collect radius (radius + margin): boost_mote_drop_distance
+		# guarantees the snake can't instantly re-collect its own shed power.
+		var drop_dist: float = current_radius * 1.4 + config.boost_mote_drop_distance
+		var pos: Vector3 = global_position + back * drop_dist + lateral
+		boost_mote_emitted.emit(pos, per_mote)
 
 
 ## §3.1/§3.2 power curves — recomputed after any power change.

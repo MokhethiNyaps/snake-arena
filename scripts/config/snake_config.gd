@@ -34,8 +34,13 @@ enum BoostMode { DRAIN, COOLDOWN }
 @export var boost_multiplier: float = 1.85
 ## Turn-rate multiplier while boosting (the core boost risk).
 @export_range(0.0, 1.0) var boost_turn_penalty: float = 0.72
-## Power drained per second while boosting (DRAIN mode).
+## Power drained per second while boosting (§3.4).
 @export var boost_power_drain: float = 2.2
+## Extra world units behind the head (beyond radius * 1.4) where boost
+## motes land. Must exceed the collect radius margin or the snake would
+## instantly re-collect its own shed power and boost for free (caught live:
+## at power ~200 the collect radius ≈ radius * 1.4 exactly).
+@export var boost_mote_drop_distance: float = 1.2
 ## Cannot boost below this power (DRAIN mode).
 @export var min_boost_power: float = 4.0
 ## Corpse motes emitted per second while boosting.

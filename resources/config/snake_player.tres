@@ -16,6 +16,7 @@ boost_mode = 0
 boost_multiplier = 1.85
 boost_turn_penalty = 0.72
 boost_power_drain = 2.2
+boost_mote_drop_distance = 1.2
 min_boost_power = 4.0
 boost_mote_emission_rate = 4.0
 head_radius = 0.55

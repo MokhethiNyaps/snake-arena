@@ -40,6 +40,9 @@ func _load_player() -> void:
 	var snake: SnakeController = _player.get_node("Snake")
 	var rig: CameraRig = _player.get_node("CameraRig")
 	rig.set_target(snake)
+	# Phase 3: wire the arena economy to the player.
+	if _arena != null and _arena.has_method("setup_world"):
+		_arena.setup_world(_player, snake)
 
 
 ## Sandbox verification hooks (harmless in shipped builds; controlled by env).

@@ -1,0 +1,31 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://scripts/systems/collect_burst.gd" id="1"]
+
+[sub_resource type="ParticleProcessMaterial" id="ppm"]
+lifetime_min = 0.35
+lifetime_max = 0.55
+emission_shape = 1
+sphere_radius = 0.3
+initial_velocity_min = 2.5
+initial_velocity_max = 6.0
+gravity = Vector3(0, -2, 0)
+scale_min = 0.12
+scale_max = 0.3
+color = Color(0.1, 0.9, 1, 1)
+
+[sub_resource type="QuadMesh" id="quad"]
+size = Vector2(0.1, 0.1)
+
+[node name="CollectBurst" type="Node3D"]
+script = ExtResource("1")
+visible = false
+
+[node name="Particles" type="GPUParticles3D" parent="."]
+emitting = false
+amount = 14
+one_shot = true
+explosiveness = 1.0
+lifetime = 0.6
+process_material = SubResource("ppm")
+mesh = SubResource("quad")

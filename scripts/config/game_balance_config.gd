@@ -34,6 +34,12 @@ extends Resource
 @export var surge_collectible_count: int = 40
 ## Rare shards dropped by one Surge.
 @export var surge_rare_count: int = 1
+## Seconds the announcement beam stays visible.
+@export var surge_beam_time: float = 3.0
+## Seconds between staggered surge spawns (cluster forms organically).
+@export var surge_spawn_stagger: float = 0.03
+## Distance within which the first snake claims the surge bonus (§12.3).
+@export var surge_claim_radius: float = 12.0
 
 @export_group("World population (§11)")
 ## Collectibles the arena maintains at steady state.
@@ -56,3 +62,20 @@ extends Resource
 @export var spawn_retry_attempts: int = 12
 ## Power-ups alive at steady state.
 @export var powerup_target_count: int = 5
+
+@export_group("Scoring & combo (§12.3)")
+## Combo window: a collect within this many seconds of the previous one
+## increments the combo.
+@export var combo_window: float = 1.4
+## Score multiplier added per combo step: 1 + min(combo, combo_max_bonus_steps) * combo_multiplier_step.
+@export var combo_multiplier_step: float = 0.05
+## Combo steps beyond which the multiplier stops growing (max 2x at step 20).
+@export var combo_max_bonus_steps: int = 20
+## Survival score granted per second alive (§12.3).
+@export var survival_score_per_second: float = 6.0
+## Score for being first to a Surge cluster (§12.3).
+@export var surge_claim_score: int = 300
+
+@export_group("Collection (§3.3)")
+## Extra collection radius added to the snake's current head radius.
+@export var collect_radius_margin: float = 0.6

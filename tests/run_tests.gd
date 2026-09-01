@@ -20,7 +20,7 @@ func _init() -> void:
 
 func _run() -> void:
 	print("==================================================")
-	print(" COILCLASH TEST SUITE (Phase 1)")
+	print(" COILCLASH TEST SUITE")
 	print("==================================================")
 	var test_files: Array[String] = _discover_test_files()
 	test_files.sort()
