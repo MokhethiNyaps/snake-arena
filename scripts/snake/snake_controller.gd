@@ -24,6 +24,8 @@ const STAT_TURN: StringName = &"turn"
 const STAT_RADIUS: StringName = &"radius"
 
 signal died(snake: SnakeController)
+## §9: emitted when the head first enters the soft boundary zone.
+signal wall_hit(snake: SnakeController)
 signal power_changed(power: float)
 signal boosted_changed(boosting: bool)
 ## §3.4 — a corpse mote was shed behind the head while boosting.
@@ -117,6 +119,11 @@ func head_position() -> Vector3:
 	return global_position
 
 
+## Live segment count (growth eases in; the target lags the curve).
+func segment_count() -> int:
+	return _segments_current
+
+
 ## Unit XZ vector of the current facing angle (0 = +Z, positive toward +X).
 func facing_vector() -> Vector3:
 	return Vector3(sin(deg_to_rad(facing_angle_deg)), 0.0, cos(deg_to_rad(facing_angle_deg)))
@@ -175,8 +182,26 @@ func _resolve_steer_input() -> Vector3:
 
 ## §3.5 soft zone: slow 0.85x, push inward; hard wall slides. Applied as a
 ## position clamp + speed factor (AI treats the zone as hazard in Phase 5).
+var _was_in_soft_zone: bool = false
+
+
+func _soft_zone_edge(r: float) -> void:
+	var in_zone: bool = r >= soft_zone_inner
+	if in_zone and not _was_in_soft_zone:
+		wall_hit.emit(self)
+	_was_in_soft_zone = in_zone
+
+
+## §3.6 shrink: the arena owns the live radius; snakes follow it.
+func set_arena_radius(r: float) -> void:
+	arena_radius = r
+	soft_zone_inner = r - _balance().soft_zone_width
+
+
 func _soft_zone_factor() -> float:
 	var r: float = global_position.length()
+	_soft_zone_edge(r)
+
 	var soft_start: float = soft_zone_inner
 	if r < soft_start:
 		return 1.0

@@ -35,3 +35,6 @@ absorbed_power_fraction = 0.62
 dropped_mass_fraction = 0.72
 corpse_mote_decay_time = 14.0
 corpse_mote_stagger = 0.35
+corpse_mote_power_divisor = 3.0
+corpse_mote_min_count = 6
+corpse_mote_max_count = 40

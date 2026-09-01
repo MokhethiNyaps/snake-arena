@@ -195,10 +195,11 @@ func get_banner_height_px() -> int:
 	return 60 if (_banner != null and _banner.visible) else 0
 
 
-## SceneTreeTimer helper: process_always so it fires while the tree is
-## paused mid-ad.
+## SceneTreeTimer helper: process_always + ignore_time_scale so the
+## simulated latency is real time even while paused mid-ad or during a
+## combat hit-stop.
 func _delay(seconds: float) -> void:
-	await (Engine.get_main_loop() as SceneTree).create_timer(seconds, true).timeout
+	await (Engine.get_main_loop() as SceneTree).create_timer(seconds, true, false, true).timeout
 
 
 ## Builds the fake-ad overlay (dark panel + countdown + close) and the

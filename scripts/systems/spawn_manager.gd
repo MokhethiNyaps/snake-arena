@@ -20,6 +20,9 @@ const POISSON_MAX_CANDIDATES: int = 1600
 @export var table: CollectibleTable = preload("res://resources/config/collectibles.tres")
 
 var collectibles: CollectibleManager = null
+## Live arena radius for spawn validity: the §3.6 shrink updates this as
+## the wall closes in.
+var validity_radius: float = 0.0
 var player_snake: SnakeController = null
 
 var _rng: RandomNumberGenerator = RandomNumberGenerator.new()
@@ -38,6 +41,7 @@ var _beam_timer: float = 0.0
 
 func _ready() -> void:
 	_rng.randomize()
+	validity_radius = balance.arena_radius
 	_precompute_candidates()
 	_beam = _make_beam()
 	add_child(_beam)
@@ -115,7 +119,7 @@ func _pick_def_for_time(t: float) -> CollectibleDef:
 
 ## §11 validity checks. Returns a position that passes all of them.
 func find_valid_collectible_position() -> Vector3:
-	var radius: float = balance.arena_radius - 4.0
+	var radius: float = validity_radius - 4.0
 	for attempt in balance.spawn_retry_attempts:
 		var pos: Vector3 = _random_ring_pos(radius)
 		if _pos_valid(pos, balance.collectible_min_spawn_distance):
@@ -135,7 +139,7 @@ func find_valid_collectible_position() -> Vector3:
 func find_ai_spawn_position(min_player_dist: float = -1.0) -> Vector3:
 	if min_player_dist < 0.0:
 		min_player_dist = balance.ai_min_spawn_distance
-	var radius: float = balance.arena_radius - 4.0
+	var radius: float = validity_radius - 4.0
 	for attempt in balance.spawn_retry_attempts:
 		var pos: Vector3 = _random_ring_pos(radius)
 		if _pos_valid(pos, min_player_dist):
@@ -144,7 +148,7 @@ func find_ai_spawn_position(min_player_dist: float = -1.0) -> Vector3:
 
 
 func _pos_valid(pos: Vector3, min_player_dist: float) -> bool:
-	if pos.length() > balance.arena_radius - 4.0:
+	if pos.length() > validity_radius - 4.0:
 		return false
 	if player_snake != null and pos.distance_to(player_snake.global_position) < min_player_dist:
 		return false
@@ -228,7 +232,7 @@ func try_claim_surge(pos: Vector3) -> bool:
 
 ## Precomputed Poisson-disc-ish candidate set for fallback spawns (§11).
 func _precompute_candidates() -> void:
-	var radius: float = balance.arena_radius - 4.0
+	var radius: float = validity_radius - 4.0
 	var attempt: int = 0
 	while _candidates.size() < POISSON_MAX_CANDIDATES and attempt < POISSON_MAX_CANDIDATES * 30:
 		attempt += 1

@@ -83,3 +83,7 @@ enum BoostMode { DRAIN, COOLDOWN }
 @export var corpse_mote_decay_time: float = 14.0
 ## Stagger between corpse mote spawns during the death dissolve (§9).
 @export var corpse_mote_stagger: float = 0.35
+## §9 corpse-mote drop: count = clamp(floor(dropped_power / this), min, max).
+@export var corpse_mote_power_divisor: float = 3.0
+@export var corpse_mote_min_count: int = 6
+@export var corpse_mote_max_count: int = 40

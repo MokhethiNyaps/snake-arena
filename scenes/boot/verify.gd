@@ -17,6 +17,8 @@ var _phase_frames: int = 0
 var _heading_frames: int = 0
 var _boost_frames: int = 0
 var _boost_start_power: float = 0.0
+var _boost_drain_sum: float = 0.0
+var _last_boost_power: float = 0.0
 var _start_pos: Vector3 = Vector3.ZERO
 var _big_start_pos: Vector3 = Vector3.ZERO
 var _path_length: float = 0.0
@@ -31,6 +33,8 @@ var _econ_boost_start: float = 0.0
 ## Minimum power observed while the boost key was held (drain evidence even
 ## if incidental collects raise power mid-boost).
 var _min_power_during_boost: float = 0.0
+var _econ_boost_drain_sum: float = 0.0
+var _last_econ_boost_power: float = 0.0
 # Phase 4 (ad scaffolding) scenario state.
 var _ad_entered: bool = false
 var _ad_contract_ok: bool = false
@@ -42,6 +46,31 @@ var _ai_start_pos: Dictionary = {}
 var _ai_seen_states: Dictionary = {}
 var _ai_path: Dictionary = {}
 var _ai_last_pos: Dictionary = {}
+var _ai_track_ticks: Dictionary = {}
+var _ai_track_start_ms: Dictionary = {}
+# Wall-clock phase entry (combat hit-stop can stall physics ticks).
+var _phase_wall_start: int = 0
+
+
+func _phase_waited_s() -> float:
+	return float(Time.get_ticks_msec() - _phase_wall_start) / 1000.0
+
+
+# Phase 6 (conflict) scenario state.
+var _kill_power_before: float = 0.0
+var _kill_score_before: float = 0.0
+var _kill_victim_power: float = 0.0
+var _kill_victim_id: int = -1
+var _kill_victim: SnakeController = null
+var _kill_start_count: int = 0
+var _kill_hit_stop_seen: bool = false
+var _kill_rim_green_seen: bool = false
+var _kill_detected_at_ms: int = -1
+var _kill_dying_entry: Dictionary = {}
+var _kill_attempts: int = 0
+var _kill_verified: bool = false
+var _kill_done: bool = false
+var _die_seen: bool = false
 
 var _max_frame_ms: float = 0.0
 var _frame_samples: int = 0
@@ -53,6 +82,10 @@ func _ready() -> void:
 	# ticking regardless (PROCESS_MODE_ALWAYS) or scenario D deadlocks.
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	_build_world()
+	# Combat is live from Phase 6 on: AI can legitimately kill the player.
+	# Phases 0-17 need the player ALIVE, so god-mode until the death
+	# scenario (phase 20) — the player can still attack during god-mode.
+	_snake.set_meta("invulnerable_until", 1.0e9)
 
 
 func _build_world() -> void:
@@ -109,7 +142,12 @@ func _physics_process(delta: float) -> void:
 				_snake.add_power(10.0)
 				_boost_start_power = _snake.power
 				_min_power_during_boost = _snake.power
+				_last_boost_power = _snake.power
 			Input.parse_input_event(_key(KEY_SPACE, true))
+			# Cumulative per-tick decrease: re-collecting shed/foreign motes
+			# can spike power UP mid-boost, but the drain ticks still cost.
+			_boost_drain_sum += maxf(0.0, _last_boost_power - _snake.power)
+			_last_boost_power = _snake.power
 			_boost_frames += 1
 			_min_power_during_boost = minf(_min_power_during_boost, _snake.power)
 			if _snake != null and not _snake.boosting and _boost_frames > 10:
@@ -181,9 +219,13 @@ func _physics_process(delta: float) -> void:
 			if _phase_frames == 1:
 				_econ_boost_start = _snake.power
 				_min_power_during_boost = _snake.power
+				_econ_boost_drain_sum = 0.0
+				_last_econ_boost_power = _snake.power
 				_econ_motes_before = _arena.collectible_manager.mote_count()
 			Input.parse_input_event(_key(KEY_SPACE, true))
 			_min_power_during_boost = minf(_min_power_during_boost, _snake.power)
+			_econ_boost_drain_sum += maxf(0.0, _last_econ_boost_power - _snake.power)
+			_last_econ_boost_power = _snake.power
 			if _phase_frames >= 40:
 				Input.parse_input_event(_key(KEY_SPACE, false))
 				_enter_phase(10)
@@ -251,6 +293,9 @@ func _physics_process(delta: float) -> void:
 		13:  # FORCED TIMEOUT: the mandatory watchdog must unstick the game
 			if _phase_frames == 1:
 				_ad_entered = false
+				# Combat is live now — clear any hit-stop so the ad phases
+				# run at normal speed.
+				Engine.time_scale = 1.0
 				var panel5: CanvasLayer = AdManager.get_debug_panel()
 				panel5._on_outcome_changed(AdProviderMock.ForcedOutcome.TIMEOUT)
 				AdManager._config.show_watchdog_seconds = 1.0
@@ -277,38 +322,189 @@ func _physics_process(delta: float) -> void:
 		14:  # settle, then ad-scenario checks, then the AI scenario (Phase 5)
 			if _phase_frames >= 20:
 				_checks_ads()
-		15:  # record the AI population baseline (§11: 8 AI, unique names)
+		15:  # record the AI population baseline (§11: 8 AI, unique names).
+			# Combat is LIVE from Phase 6 on, so an AI may have just died —
+			# wait for the population to refill before sampling.
 			if _phase_frames == 1:
-				var director: AIDirector = _arena.ai_director
-				if director == null or director.get_ai_count() != director.balance.ai_count:
-					_fail("expected %d AI, found %d" % [director.balance.ai_count if director else 0, director.get_ai_count() if director else -1])
-					return
+				_phase_wall_start = Time.get_ticks_msec()
+			var director: AIDirector = _arena.ai_director
+			if director.get_ai_count() >= director.balance.ai_count:
 				var names: Dictionary = {}
 				for ai in director.ai_controllers:
 					if names.has(ai.display_name):
 						_fail("AI name reused in match: %s" % ai.display_name)
 						return
 					names[ai.display_name] = true
+					# Skip corpses mid-dissolve: a dead snake can't move and
+					# would fail the movement check with 0 path.
+					if ai.snake == null or not ai.snake.alive:
+						continue
 					var id: int = ai.get_instance_id()
 					_ai_start_pos[id] = ai.snake.global_position
 					_ai_last_pos[id] = ai.snake.global_position
 					_ai_path[id] = 0.0
+					_ai_track_ticks[id] = 0
+					_ai_track_start_ms[id] = Time.get_ticks_msec()
 					_ai_seen_states[str(ai._fsm.current_name())] = true
 				print("CC_VERIFY_AI_SPAWNED count=%d names=%s" % [director.get_ai_count(), ", ".join(names.keys())])
 				_enter_phase(16)
-		16:  # watch the AI play for 300 ticks (5 s): sample states every 60
+			elif _phase_waited_s() > 10.0:
+				_fail("AI population never reached %d (count=%d)" % [director.balance.ai_count, director.get_ai_count()])
+				return
+		16:  # watch the AI play for ~6 s of WALL time (combat + hit-stop can
+			# slow physics ticks; frame counts would stall the harness)
 			for ai in _arena.ai_director.ai_controllers:
+				if ai.snake == null or not ai.snake.alive:
+					continue
 				var id: int = ai.get_instance_id()
+				if not _ai_path.has(id):
+					# Died + respawned mid-window: start tracking the new one.
+					_ai_path[id] = 0.0
+					_ai_last_pos[id] = ai.snake.global_position
+					_ai_start_pos[id] = ai.snake.global_position
+					_ai_track_ticks[id] = 0
+					_ai_track_start_ms[id] = Time.get_ticks_msec()
+					continue
 				_ai_path[id] = float(_ai_path[id]) + ai.snake.global_position.distance_to(_ai_last_pos[id])
 				_ai_last_pos[id] = ai.snake.global_position
+				_ai_track_ticks[id] = int(_ai_track_ticks[id]) + 1
 			if _phase_frames % 60 == 0:
 				for ai in _arena.ai_director.ai_controllers:
 					_ai_seen_states[str(ai._fsm.current_name())] = true
-			if _phase_frames >= 300:
+			if _phase_waited_s() >= 6.0:
 				_checks_ai_window()
-		17:  # settle, then final verdict + screenshot
-			if _phase_frames >= 30:
+		17:  # settle, then Phase 5 verdict → straight into the conflict
+			# scenario (Phase 6)
+			if _phase_frames == 1:
+				_phase_wall_start = Time.get_ticks_msec()
+			if _phase_waited_s() >= 0.6:
 				_checks_ai_final()
+		18:  # KILL: teleport the big player head into a small AI's body path
+			if _phase_frames == 1:
+				_phase_wall_start = Time.get_ticks_msec()
+				var director: AIDirector = _arena.ai_director
+				_kill_start_count = director.get_ai_count()
+				_snake.power = 100.0
+				_snake._update_derived_stats()
+				_snake._sync_segment_target()
+				# Pick a LIVE small AI and sample its rim state (should be
+				# GREEN: the player can eat it).
+				var victim: SnakeController = null
+				for ai in director.ai_controllers:
+					if ai.snake != null and ai.snake.alive:
+						victim = ai.snake
+						break
+				if victim == null:
+					await get_tree().create_timer(1.0, true).timeout
+					for ai in director.ai_controllers:
+						if ai.snake != null and ai.snake.alive:
+							victim = ai.snake
+							break
+				if victim == null:
+					_fail("no live AI to kill")
+					return
+				var mat: StandardMaterial3D = victim.body.mmi.material_override
+				if mat != null and mat.emission.g > mat.emission.r:
+					_kill_rim_green_seen = true
+				_kill_victim_power = victim.power
+				_kill_victim_id = victim.get_instance_id()
+				_kill_power_before = _snake.power
+				_kill_score_before = _arena.score_manager.get_score()
+				# Teleport the head onto the victim's recent trail →
+				# head-into-body contact on the next combat tick.
+				var trail: Array = []
+				victim.history.trail_samples(trail, 40)
+				var hit_point: Vector3 = trail[8]
+				_snake.global_position = hit_point
+				_kill_victim = victim
+				print("CC_VERIFY_KILL victim_power=%.1f player_power=%.1f rim_green=%s count=%d dist=%.2f" % [
+					_kill_victim_power, _snake.power, _kill_rim_green_seen, _kill_start_count,
+					_snake.global_position.distance_to(victim.global_position)])
+			# Sample the hit-stop window.
+			if Engine.time_scale < 1.0:
+				_kill_hit_stop_seen = true
+			# Detect the kill the moment the victim dies (direct reference —
+			# the registry only drops it at dissolve end, by which time the
+			# dying entry is already gone).
+			if _kill_detected_at_ms < 0 and _kill_victim != null \
+					and not _kill_victim.alive:
+				_kill_detected_at_ms = Time.get_ticks_msec()
+				# Capture the victim's dying entry AT the kill instant: the
+				# dissolve removes it after 0.55 s, but the dictionary
+				# reference keeps its final state (mote spawn count).
+				for e in _arena.combat_manager._dying:
+					if int((e["snake"] as SnakeController).get_instance_id()) == _kill_victim_id:
+						_kill_dying_entry = e
+						break
+				if _kill_dying_entry.is_empty():
+					# A third party died instead — my teleport missed.
+					# Re-arm against another live victim (max 3 attempts).
+					if _rearm_kill_attempt():
+						_kill_detected_at_ms = -1
+					else:
+						_fail("victim never died to the player (attempts exhausted)")
+						return
+				else:
+					var total: int = int(_kill_dying_entry["total_motes"])
+					var cfg: SnakeConfig = _snake.config
+					var expected_total: int = clampi(int(floor(_kill_victim_power * cfg.dropped_mass_fraction / cfg.corpse_mote_power_divisor)),
+						cfg.corpse_mote_min_count, cfg.corpse_mote_max_count)
+					if total != expected_total:
+						_fail("corpse mote count %d != expected %d" % [total, expected_total])
+						return
+					print("CC_VERIFY_KILL_DETECTED motes_total=%d" % total)
+			# 2.5 s after detection: staggered spawns must have started.
+			# (The kill triggers hit-stop, which dilates game time ~0.6 s;
+			# a 0.6 s real-time check could land before the first 0.35 s
+			# stagger tick. The captured dict freezes at dissolve removal.)
+			if _kill_detected_at_ms >= 0 and not _kill_verified \
+					and Time.get_ticks_msec() - _kill_detected_at_ms > 2500:
+				_kill_verified = true
+				_verify_kill()
+			if _phase_waited_s() > 12.0 and not _kill_done:
+				_fail("kill scenario never resolved (count=%d start=%d detected=%d)" % [
+					_arena.ai_director.get_ai_count(), _kill_start_count, _kill_detected_at_ms])
+				return
+		19:  # wait for the §11 respawn: AI count returns to 8 within ~6 s
+			if _phase_frames == 1:
+				_phase_wall_start = Time.get_ticks_msec()
+			if _arena.ai_director.get_ai_count() >= _arena.ai_director.balance.ai_count:
+				print("CC_VERIFY_RESPAWN ok count=%d" % _arena.ai_director.get_ai_count())
+				_enter_phase(20)
+			if _phase_waited_s() > 10.0:
+				_fail("AI respawn never completed (count=%d)" % _arena.ai_director.get_ai_count())
+				return
+		20:  # DIE: shrink the player, grow one AI, drive head into its body
+			if _phase_frames == 1:
+				_phase_wall_start = Time.get_ticks_msec()
+				_snake.remove_meta("invulnerable_until")
+				Engine.time_scale = 1.0
+				_snake.power = 2.0
+				_snake._update_derived_stats()
+				_snake._sync_segment_target()
+				var big: SnakeController = _arena.ai_director.ai_controllers[0].snake
+				big.power = 120.0
+				big._update_derived_stats()
+				big._sync_segment_target()
+				await get_tree().create_timer(0.5, true).timeout
+				var trail: Array = []
+				big.history.trail_samples(trail, 40)
+				_snake.global_position = trail[6]
+				_die_seen = false
+				print("CC_VERIFY_DIE player_power=%.1f big_power=%.1f" % [_snake.power, big.power])
+			if not _snake.alive and not _die_seen:
+				_die_seen = true
+				print("CC_VERIFY_PLAYER_DIED state=%s" % GameManager.state_name())
+			if _die_seen and GameManager.is_in(GameManager.State.GAME_OVER):
+				_enter_phase(21)
+			if _phase_waited_s() > 15.0:
+				_fail("death scenario never resolved (state=%s alive=%s)" % [GameManager.state_name(), _snake.alive])
+				return
+		21:  # settle, then final verdict + screenshot
+			if _phase_frames == 1:
+				_phase_wall_start = Time.get_ticks_msec()
+			if _phase_waited_s() >= 0.8:
+				_checks_conflict()
 
 
 func _enter_phase(p: int) -> void:
@@ -331,11 +527,12 @@ func _checks_small() -> void:
 	if moved < 20.0:
 		_fail("snake moved only %.1f units in ~6s (speed=%.2f)" % [moved, _snake.current_speed])
 		return
-	# 2. Boost drained power (risk loop live). The MINIMUM observed power
-	# while boosting must dip below the start value — a net comparison of
-	# start vs end can be masked by incidental collects during the boost.
-	if _min_power_during_boost >= _boost_start_power:
-		_fail("boost did not drain power (min %.1f vs start %.1f)" % [_min_power_during_boost, _boost_start_power])
+	# 2. Boost drained power (risk loop live). The CUMULATIVE per-tick
+	# decrease must exceed a full second of drain — re-collecting shed or
+	# foreign corpse motes can spike power up mid-boost (a circling snake
+	# recycles its own shed motes), but the drain ticks always cost.
+	if _boost_drain_sum < 1.8:
+		_fail("boost did not drain power (sum %.2f, start %.1f)" % [_boost_drain_sum, _boost_start_power])
 		return
 	# 3. Body follows: segment 0 trails the head by roughly one spacing.
 	var head: Vector3 = _snake.global_position
@@ -400,10 +597,11 @@ func _checks_economy() -> void:
 	if cm.mote_count() <= _econ_motes_before:
 		_fail("boost shed no motes (before=%d after=%d)" % [_econ_motes_before, cm.mote_count()])
 		return
-	# 11. Boost still drained power (min-power check — a plain start/end
-	# comparison can be masked by incidental collects during the boost).
-	if _min_power_during_boost >= _econ_boost_start:
-		_fail("economy boost did not drain (min %.2f vs start %.2f)" % [_min_power_during_boost, _econ_boost_start])
+	# 11. Boost still drained power (cumulative decrease — mote
+	# re-collection can spike power up mid-boost; drain ticks always cost;
+	# hit-stop can dilate the window, so any clear drain passes).
+	if _econ_boost_drain_sum < 0.3:
+		_fail("economy boost did not drain (sum %.2f vs start %.2f)" % [_econ_boost_drain_sum, _econ_boost_start])
 		return
 	print("CC_VERIFY_PHASE3_PASS collectibles=%d motes=%d score=%.1f combo=%d" % [
 		cm.non_mote_count(), cm.mote_count(), _arena.score_manager.get_score(),
@@ -438,10 +636,19 @@ func _checks_ai_window() -> void:
 	var director: AIDirector = _arena.ai_director
 	# Every AI kept moving (path length, not displacement — a high-turn-rate
 	# snake legitimately coils; the Phase 2 player check hit the same trap).
+	# AIs that respawned mid-window get a proportional allowance.
 	for ai in director.ai_controllers:
+		if ai.snake == null or not ai.snake.alive:
+			continue
 		var id: int = ai.get_instance_id()
-		if float(_ai_path[id]) < 20.0:
-			_fail("AI %s travelled only %.1f units in 5s" % [ai.display_name, float(_ai_path[id])])
+		var ticks: int = int(_ai_track_ticks.get(id, 0))
+		# Wall-time allowance (hit-stop dilutes per-tick distance): 2 u/s
+		# tracked, floor 20 — a healthy snake does 7.6+ u/s.
+		var wall_s: float = float(Time.get_ticks_msec() - int(_ai_track_start_ms.get(id, Time.get_ticks_msec()))) / 1000.0
+		var needed: float = minf(20.0, wall_s * 2.0)
+		if float(_ai_path.get(id, 0.0)) < needed:
+			_fail("AI %s travelled only %.1f units (%.1fs tracked, needed %.1f)" % [
+				ai.display_name, float(_ai_path.get(id, 0.0)), wall_s, needed])
 			return
 	# At least two AI have grown past the starting-power spread (they
 	# collected from the economy).
@@ -468,35 +675,110 @@ func _checks_ai_window() -> void:
 func _checks_ai_final() -> void:
 	if _finished:
 		return
-	_finished = true
 	var director: AIDirector = _arena.ai_director
 	# §8.5 hard budget: all AI combined < 2.5 ms/frame (CPU decision cost —
 	# measured on the sandbox CPU, not GPU-bound like frame time).
 	if director.ai_ms_max >= director.balance.ai_frame_budget_ms:
 		_fail("AI budget blown: max %.2f ms/frame (budget %.2f)" % [director.ai_ms_max, director.balance.ai_frame_budget_ms])
 		return
-	# Frame budget across ALL scenarios (worst case: 420 collectibles +
-	# 60-segment snake + 8 AI + ad overlay). 20 ms llvmpipe regression
+	print("CC_VERIFY_PHASE5_PASS ai=%d states=%s ai_ms_max=%.2f budget=%.2f" % [
+		director.get_ai_count(), str(_ai_seen_states.keys()),
+		director.ai_ms_max, director.balance.ai_frame_budget_ms])
+	_enter_phase(18)
+
+
+## True when the chosen victim is no longer a live AI registry member.
+func _victim_gone() -> bool:
+	for ai in _arena.ai_director.ai_controllers:
+		if ai.snake != null and int(ai.snake.get_instance_id()) == _kill_victim_id:
+			return false
+	return true
+
+
+## Re-arms the kill scenario against another live small AI. Returns false
+## when no live AI remains (attempts exhausted).
+func _rearm_kill_attempt() -> bool:
+	_kill_attempts += 1
+	if _kill_attempts > 3:
+		return false
+	_snake.power = 100.0
+	_snake._update_derived_stats()
+	_snake._sync_segment_target()
+	for ai in _arena.ai_director.ai_controllers:
+		if ai.snake != null and ai.snake.alive and ai.snake.power < 50.0:
+			_kill_victim = ai.snake
+			_kill_victim_id = ai.snake.get_instance_id()
+			_kill_victim_power = ai.snake.power
+			_kill_power_before = _snake.power
+			_kill_score_before = _arena.score_manager.get_score()
+			_kill_start_count = _arena.ai_director.get_ai_count()
+			var trail: Array = []
+			ai.snake.history.trail_samples(trail, 40)
+			if trail.size() > 10:
+				_snake.global_position = trail[8]
+				print("CC_VERIFY_KILL_REARM attempt=%d victim_power=%.1f dist=%.2f" % [
+					_kill_attempts, _kill_victim_power,
+					_snake.global_position.distance_to(ai.snake.global_position)])
+				return true
+	_fail("no rearm target")
+	return false
+
+
+## Phase 6 kill verification: absorb power/score landed, the victim's own
+## corpse-mote drop ran (captured dying entry with staggered spawns —
+## late-run mote decay makes global mote counts meaningless), hit-stop
+## engaged, and the rim light was readable BEFORE the kill.
+func _verify_kill() -> void:
+	var cm: CombatManager = _arena.combat_manager
+	var power_gain: float = _snake.power - _kill_power_before
+	var expected: float = _kill_victim_power * 0.62
+	if power_gain < expected * 0.5:
+		_fail("absorb power missing: gain %.2f expected ~%.2f" % [power_gain, expected])
+		return
+	var score_gain: float = _arena.score_manager.get_score() - _kill_score_before
+	var expected_score: float = cm.balance.kill_score_base + floor(_kill_victim_power * cm.balance.kill_score_power_factor)
+	if score_gain < expected_score * 0.5:
+		_fail("kill score missing: gain %.1f expected ~%.1f" % [score_gain, expected_score])
+		return
+	if _kill_dying_entry.is_empty():
+		_fail("no dying entry captured for the victim")
+		return
+	if int(_kill_dying_entry["spawned"]) < 1:
+		_fail("corpse motes not spawning (spawned=%d of %d)" % [
+			int(_kill_dying_entry["spawned"]), int(_kill_dying_entry["total_motes"])])
+		return
+	if not _kill_hit_stop_seen:
+		_fail("hit-stop never engaged (time_scale never dipped)")
+		return
+	_kill_done = true
+	print("CC_VERIFY_PHASE6_KILL ok power+%.2f score+%.1f motes=%d/%d hit_stop=%s rim_green=%s" % [
+		power_gain, score_gain, int(_kill_dying_entry["spawned"]), int(_kill_dying_entry["total_motes"]),
+		_kill_hit_stop_seen, _kill_rim_green_seen])
+	_enter_phase(19)
+
+
+## Phase 6 exit criteria: you can kill AND be killed, and always
+## understand why (the rim-light + matrix checks cover the why).
+func _checks_conflict() -> void:
+	if _finished:
+		return
+	_finished = true
+	if not _kill_done:
+		_fail("kill scenario failed")
+		return
+	if not _die_seen or not GameManager.is_in(GameManager.State.GAME_OVER):
+		_fail("death scenario failed (state=%s alive=%s)" % [GameManager.state_name(), _snake.alive])
+		return
+	if not InputManager.is_suspended():
+		_fail("input not suspended after player death")
+		return
+	# Frame budget across ALL scenarios. 20 ms llvmpipe regression
 	# threshold (decision #11).
 	if _max_frame_ms > 20.0:
 		_fail("frame budget blown: max %.1f ms (avg %.1f)" % [_max_frame_ms, _frame_acc_ms / maxf(1.0, float(_frame_samples))])
 		return
-	# Framing: the head must project on-screen, near centre.
-	var view_cam2: Camera3D = get_viewport().get_camera_3d()
-	var head_screen: Vector2 = view_cam2.unproject_position(_snake.head_position())
-	var on_screen: bool = (
-		head_screen.x > 0.0 and head_screen.x < float(view_cam2.get_viewport().get_visible_rect().size.x)
-		and head_screen.y > 0.0 and head_screen.y < float(view_cam2.get_viewport().get_visible_rect().size.y)
-		and not view_cam2.is_position_behind(_snake.head_position()))
-	print("CC_VERIFY_FRAME head_screen=%s on_screen=%s rig_pos=%s rig_rot=%s cam_fwd=%s head=%s" % [
-		head_screen, on_screen, _rig.global_position, _rig.global_rotation_degrees,
-		-view_cam2.global_transform.basis.z, _snake.head_position()])
-	if not on_screen:
-		_fail("snake head is off-screen at %s" % head_screen)
-		return
-	print("CC_VERIFY_PHASE5_PASS ai=%d states=%s ai_ms_max=%.2f budget=%.2f" % [
-		director.get_ai_count(), str(_ai_seen_states.keys()),
-		director.ai_ms_max, director.balance.ai_frame_budget_ms])
+	print("CC_VERIFY_PHASE6_PASS killed=%s died=%s input_suspended=%s hit_stop=%s" % [
+		_kill_done, _die_seen, InputManager.is_suspended(), _kill_hit_stop_seen])
 	# Screenshot (skipped in headless mode — no renderer).
 	if not DisplayServer.get_name() == "headless":
 		await RenderingServer.frame_post_draw

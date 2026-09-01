@@ -104,6 +104,24 @@ extends Resource
 @export var ai_blunder_interval: float = 2.0
 @export var ai_blunder_hold: float = 0.5
 
+@export_group("Combat (§9/§12)")
+## Base score for absorbing a rival (§12.3: 250 + floor(power*4)).
+@export var kill_score_base: float = 250.0
+@export var kill_score_power_factor: float = 4.0
+## Threat rim-light refresh cadence (§9: every 4 physics ticks).
+@export var rim_update_ticks: int = 4
+## Hit-stop (§12.1): time scale floor and durations (real seconds).
+@export var hit_stop_scale: float = 0.15
+@export var hit_stop_duration: float = 0.18
+@export var hit_stop_recover: float = 0.4
+## Camera trauma amounts (§5).
+@export var eat_trauma: float = 0.55
+@export var die_trauma: float = 0.9
+@export var wall_hit_trauma: float = 0.15
+@export var rare_trauma: float = 0.3
+## §12.3 rank bonus: #1 3000, #2 1800, #3 1000, #4-5 400, else 0.
+@export var rank_bonus_top: Array[float] = [3000.0, 1800.0, 1000.0, 400.0, 400.0]
+
 @export_group("Scoring & combo (§12.3)")
 ## Combo window: a collect within this many seconds of the previous one
 ## increments the combo.

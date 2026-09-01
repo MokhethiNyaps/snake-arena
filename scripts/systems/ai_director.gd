@@ -106,7 +106,15 @@ func _spawn_ai(initial: bool) -> void:
 	snake._sync_segment_target()
 	snake.boost_mote_emitted.connect(_on_ai_boost_mote)
 	snake.died.connect(_on_ai_died)
+	snake.wall_hit.connect(_on_ai_wall_hit)
 	ai_controllers.append(ai)
+
+
+## §9: wall-hit trauma + vignette pulse for every snake, routed through
+## the arena (which owns the camera rig and the vignette layer).
+func _on_ai_wall_hit(_snake: SnakeController) -> void:
+	if arena_owner != null and arena_owner.has_method("on_wall_hit"):
+		arena_owner.call("on_wall_hit", false)
 
 
 func _rng_range(rng: RandomNumberGenerator, lo: float, hi: float) -> float:
@@ -119,9 +127,21 @@ func _on_ai_boost_mote(pos: Vector3, power: float) -> void:
 
 
 func _on_ai_died(_snake: SnakeController) -> void:
-	# §11: respawn 2.5 s after death. The controller is freed by the death
-	# sequence (Phase 6); the registry entry is pruned there via snake_died.
+	# §11: respawn 2.5 s after death. The controller node is freed when the
+	# dissolve completes (CombatManager → on_ai_combat_death).
 	_pending_respawns.append(balance.ai_respawn_delay)
+
+
+## Called by CombatManager once the corpse dissolve finishes: drops the
+## dead AI from the registry and frees its node. The respawn timer (from
+## _on_ai_died) is already running.
+func on_ai_combat_death(snake: SnakeController) -> void:
+	for i in range(ai_controllers.size() - 1, -1, -1):
+		if ai_controllers[i].snake == snake:
+			var dead_ai: AIController = ai_controllers[i]
+			ai_controllers.remove_at(i)
+			dead_ai.queue_free()
+			break
 
 
 func _take_name(_rng: RandomNumberGenerator) -> String:
@@ -280,8 +300,7 @@ func wall_info(snake: SnakeController) -> Dictionary:
 
 
 ## AVOID_BODY probe: samples the probe path (lookahead seconds of travel)
-## against nearby snakes' trails; returns [{pos, radius, weight}] hits.
-##
+## against nearby snakes' trails; returns [{pos, radius, weight}] hits.##
 ## PERF (§8.5): cursor-based read_at_arc sampling measured ~0.9 ms/decision
 ## (thousands of cursor ops across 9 snakes × 10 Hz). This version walks
 ## raw trail samples (no cursors, no side effects) with a head-distance

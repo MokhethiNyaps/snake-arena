@@ -271,8 +271,12 @@ func _show_with_watchdog(placement: int, def: AdPlacementDef) -> AdResult:
 	var on_watchdog := func() -> void:
 		if slot[0] == null:
 			slot[0] = AdResult.from_code(AdResult.Code.TIMEOUT)
+	# The watchdog and the polling loop are REAL-TIME (ignore_time_scale):
+	# combat hit-stop scales Engine.time_scale, and a time-scaled watchdog
+	# would let the game stick behind an ad for 6+ real seconds (caught
+	# live: 1.0 s watchdog took 6.6 s at 0.15× time_scale).
 	var watchdog: SceneTreeTimer = get_tree().create_timer(
-		_config.show_watchdog_seconds if _config != null else 90.0, true)
+		_config.show_watchdog_seconds if _config != null else 90.0, true, false, true)
 	watchdog.timeout.connect(on_watchdog)
 	# Fire-and-forget the provider coroutine: even un-awaited, a GDScript
 	# coroutine completes on its own and emits show_completed.
@@ -282,7 +286,7 @@ func _show_with_watchdog(placement: int, def: AdPlacementDef) -> AdResult:
 	else:
 		provider.show_interstitial(placement)
 	while slot[0] == null:
-		await get_tree().create_timer(0.05, true).timeout
+		await get_tree().create_timer(0.05, true, false, true).timeout
 	if watchdog.timeout.is_connected(on_watchdog):
 		watchdog.timeout.disconnect(on_watchdog)
 	return slot[0] as AdResult
