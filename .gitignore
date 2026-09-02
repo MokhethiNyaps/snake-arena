@@ -3,3 +3,6 @@
 /android/
 /build/
 /exported/
+
+# Phase 11 web build artifacts (40 MB wasm — rebuild with tools/build_web.sh)
+web-export/

@@ -9,6 +9,45 @@ extends Node
 ## Talks to: every system that reads tuning values (through the getters).
 
 var _overrides: Dictionary = {}
+const CACHE_PATH: String = "user://remote_cache.json"
+
+
+func _ready() -> void:
+	_apply_cache()
+	var cfg: AdConfig = load("res://resources/config/ads.tres") as AdConfig
+	if cfg != null and cfg.remote_config_url != "":
+		fetch(cfg.remote_config_url)
+
+
+## Cached overrides apply instantly at boot (offline-first); a successful
+## network fetch refreshes the cache. Failures are SILENT by design —
+## .tres defaults are always playable.
+func fetch(url: String, timeout_s: float = 4.0) -> void:
+	var http: HTTPRequest = HTTPRequest.new()
+	http.timeout = timeout_s
+	add_child(http)
+	if http.request(url) != OK:
+		http.queue_free()
+		return
+	var result: Array = await http.request_completed
+	http.queue_free()
+	if result.size() < 3 or result[0] != HTTPRequest.RESULT_SUCCESS:
+		return
+	var text: String = (result[3] as PackedByteArray).get_string_from_utf8()
+	if apply_json(text):
+		var f: FileAccess = FileAccess.open(CACHE_PATH, FileAccess.WRITE)
+		if f != null:
+			f.store_string(text)
+			f.close()
+
+
+func _apply_cache() -> void:
+	if not FileAccess.file_exists(CACHE_PATH):
+		return
+	var text: String = FileAccess.get_file_as_string(CACHE_PATH)
+	if not apply_json(text):
+		DirAccess.remove_absolute(CACHE_PATH)  # poisoned cache — drop it
+
 
 
 ## Applies a JSON object of "section/key": value overrides.

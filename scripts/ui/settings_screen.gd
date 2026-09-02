@@ -37,6 +37,11 @@ func _ready() -> void:
 	_check(col, "Show minimap", "minimap", true)
 	_check(col, "Floating score numbers", "floating_numbers", true)
 	_check(col, "High-contrast HUD", "high_contrast", false)
+	# §45.8: consent re-entry + CCPA link.
+	col.add_child(_button("AD PRIVACY SETTINGS", _on_ad_privacy))
+	var cfg: AdConfig = load("res://resources/config/ads.tres") as AdConfig
+	if cfg != null and cfg.do_not_sell_url != "":
+		col.add_child(_button("DO NOT SELL MY INFO ↗", func() -> void: OS.shell_open(cfg.do_not_sell_url)))
 	col.add_child(_button("BACK", _on_back))
 
 
@@ -107,6 +112,10 @@ static func _apply_setting_now(key: String, value: Variant) -> void:
 			AudioServer.set_bus_volume_db(AudioServer.get_bus_index("Music"), float(value))
 		"sfx_db":
 			AudioServer.set_bus_volume_db(AudioServer.get_bus_index("SFX"), float(value))
+
+
+func _on_ad_privacy() -> void:
+	UIManager.push_screen(load("res://scenes/ui/consent.tscn"))
 
 
 func _on_back() -> void:

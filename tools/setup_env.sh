@@ -52,7 +52,7 @@ echo "[setup_env] Rendered test:  xvfb-run -a -s '-screen 0 1280x720x24' godot -
 # sessions — credential-path exclusion — so the remote + identity must be
 # restored every fresh sandbox; credentials remain human-provided, see
 # docs/ENVIRONMENT.md §4/§5) ---
-cd "$REPO_ROOT" 2>/dev/null || true
+cd "$(dirname "$0")/.." 2>/dev/null || true
 if [ -d .git ]; then
   git remote get-url origin >/dev/null 2>&1 || git remote add origin https://github.com/MokhethiNyaps/snake-arena.git
   git config user.name >/dev/null 2>&1 || git config user.name "Arena Agent"

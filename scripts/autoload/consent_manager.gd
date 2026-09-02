@@ -23,12 +23,25 @@ func _ready() -> void:
 	_try_load()
 
 
-## Resolves consent. Phase 1 stub: no UI exists yet, so resolve to GRANTED
-## (dev builds only; §45.8 flow replaces this in Phase 11).
-func resolve() -> void:
+const CONSENT_VERSION: String = "cc-consent-v1"
+const CONSENT_SCENE: String = "res://scenes/ui/consent.tscn"
+
+## §45.8 Phase 11 flow, driven by boot BEFORE any menu/run:
+## • Web portal build — the portal handles consent; do not double-prompt.
+## • Otherwise UNKNOWN — show the PrivacyConsent screen; ACCEPT/DECLINE
+##     sets the persisted state. DECLINE keeps the game fully playable
+##     (AdManager blocks serving; nothing gameplay-facing is gated).
+func needs_ui() -> bool:
+	return state == ConsentState.UNKNOWN
+
+func show_consent_screen() -> void:
+	UIManager.push_screen(load(CONSENT_SCENE))
+
+## Portal-deferred resolution (web): consent is the PORTAL's responsibility.
+func resolve_portal() -> void:
 	if state == ConsentState.UNKNOWN:
 		state = ConsentState.GRANTED
-		consent_version = "dev-default-1"
+		consent_version = "portal-deferred"
 		consent_timestamp_unix = int(Time.get_unix_time_from_system())
 		_save()
 		consent_resolved.emit(state)

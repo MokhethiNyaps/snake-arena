@@ -31,6 +31,17 @@ extends Resource
 @export_multiline var privacy_policy_url: String = ""
 @export_multiline var terms_url: String = ""
 
+## CCPA "Do Not Sell or Share" target (shown in Settings when non-empty).
+@export_multiline var do_not_sell_url: String = ""
+
+## COPPA/Play Families flags (§45.8) — default NOT child-directed, but the
+## flags exist and are wired through to the AdMob scaffold.
+@export var tag_for_child_directed_treatment: bool = false
+@export var tag_for_under_age_of_consent: bool = false
+
+## Remote-config endpoint (empty = never fetch; §45.10 seam).
+@export var remote_config_url: String = ""
+
 @export_group("Ad unit IDs — Google OFFICIAL demo IDs (test ads only)")
 ## Replace with real IDs from the AdMob console before shipping. Never ship demo IDs.
 @export var app_id: String = "ca-app-pub-3940256099942544~3347511713"

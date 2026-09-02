@@ -338,6 +338,7 @@ func _tick_ftue(delta: float) -> void:
 	_hint_timer += delta
 	if _hint_index < FTUE_HINTS.size() - 1 and _hint_timer >= float(FTUE_HINTS[_hint_index + 1][0]):
 		_hint_index += 1
+		Analytics.ftue_step(_hint_index)
 		_hint_title.text = str(FTUE_HINTS[_hint_index][1])
 		_hint_body.text = str(FTUE_HINTS[_hint_index][2])
 		_hint_card.visible = true

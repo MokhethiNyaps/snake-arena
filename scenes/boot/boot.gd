@@ -53,7 +53,7 @@ func _ready() -> void:
 	EventBus.settings_changed.connect(_on_setting_changed)
 	_best_score = SaveManager.get_best_score()
 	_apply_saved_audio()
-	var ui_verify: bool = OS.get_environment("CC_UI_VERIFY") != ""
+	var ui_verify: bool = _env_or_url("CC_UI_VERIFY") != ""
 	if ui_verify:
 		# Fresh-install simulation: the UI driver re-runs the real flow.
 		DirAccess.remove_absolute("user://settings.cfg")
@@ -61,19 +61,34 @@ func _ready() -> void:
 		DirAccess.remove_absolute("user://save.json")
 		DirAccess.remove_absolute("user://save.json.corrupt")
 		SaveManager.reset_for_verify()
+		DirAccess.remove_absolute("user://consent.cfg")
+		ConsentManager.state = ConsentManager.ConsentState.UNKNOWN
 	var forced_run: bool = not ui_verify and (
-		OS.get_environment("CC_SMOKE_TEST") != ""
+		_env_or_url("CC_SMOKE_TEST") != ""
 		or OS.get_environment("CC_SCREENSHOT") != ""
 		or OS.get_environment("CC_RUN_TESTS") != "")
+	# The UI driver must exist BEFORE the consent await (it is what clicks
+	# ACCEPT on the fresh-install consent screen).
+	if ui_verify:
+		var driver: Node = (load("res://tests/ui_verify_driver.gd") as GDScript).new()
+		add_child(driver)
+	# §45.8: consent resolves BEFORE any menu/run. Web portals defer to the
+	# portal (no double-prompt); headless CI paths auto-grant the dev
+	# default (no clicker exists); real first launches show the screen.
+	if ConsentManager.needs_ui():
+		if AdManager.provider is AdProviderWebPortal:
+			ConsentManager.resolve_portal()
+		elif forced_run or OS.get_environment("CC_RUN_TESTS") != "":
+			ConsentManager.set_consent(ConsentManager.ConsentState.GRANTED, "dev-default")
+		else:
+			ConsentManager.show_consent_screen()
+			await ConsentManager.consent_resolved
 	var ftue_done: bool = SaveManager.is_ftue_done()
 	if ftue_done and not forced_run:
 		_to_menu()
 	else:
 		# §13.4: first launch drops straight into a run — no menu, no ads.
 		start_run(not ftue_done)
-	if ui_verify:
-		var driver: Node = (load("res://tests/ui_verify_driver.gd") as GDScript).new()
-		add_child(driver)
 	_handle_test_env()
 
 
@@ -396,13 +411,28 @@ func _set_world_active(_active: bool) -> void:
 
 # --- sandbox verification hooks (env-gated; shipped builds never hit these) ----
 
+## Test/environment knob that works BOTH natively (env var) and in the web
+## build (URL query parameter, e.g. index.html?cc_smoke=1) — the browser
+## verification story (§48 Phase 11) uses the exact same harnesses.
+func _env_or_url(key: String) -> String:
+	var v: String = OS.get_environment(key)
+	if v != "":
+		return v
+	if OS.has_feature("web"):
+		var from_url: Variant = JavaScriptBridge.eval(
+			"new URLSearchParams(window.location.search).get('%s') || ''" % key)
+		if from_url is String:
+			return from_url
+	return ""
+
+
 func _handle_test_env() -> void:
 	if OS.get_environment("CC_BOUND_SHOT") != "":
 		_boundary_shot()
 		return
-	var smoke: String = OS.get_environment("CC_SMOKE_TEST")
-	var shot: String = OS.get_environment("CC_SCREENSHOT")
-	var run_tests: String = OS.get_environment("CC_RUN_TESTS")
+	var smoke: String = _env_or_url("CC_SMOKE_TEST")
+	var shot: String = _env_or_url("CC_SCREENSHOT")
+	var run_tests: String = _env_or_url("CC_RUN_TESTS")
 	if smoke == "" and shot == "" and run_tests == "":
 		return
 	_run_test_hooks(smoke, shot, run_tests)

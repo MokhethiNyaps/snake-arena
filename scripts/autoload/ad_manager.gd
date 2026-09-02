@@ -58,11 +58,6 @@ func _ready() -> void:
 		provider.set_ui_container(self)
 		provider.initialize(_config, ConsentManager.state)
 	_no_ads_purchased = bool(SaveManager.get_setting("ads", "no_ads_purchased", false))
-	# §45.8: consent must resolve before ads serve. In dev builds with the
-	# mock provider there is no UMP UI yet (Phase 11), so resolve to the
-	# dev-default GRANTED — real providers will require explicit consent.
-	if provider is AdProviderMock and ConsentManager.state == ConsentManager.ConsentState.UNKNOWN:
-		ConsentManager.resolve()
 	_overlay = OVERLAY_SCENE.instantiate()
 	_overlay.process_mode = Node.PROCESS_MODE_ALWAYS
 	_overlay.visible = false
@@ -72,6 +67,7 @@ func _ready() -> void:
 		_debug_panel.process_mode = Node.PROCESS_MODE_ALWAYS
 		add_child(_debug_panel)
 	EventBus.run_started.connect(_on_run_started)
+	EventBus.player_died.connect(_on_player_died_portal)
 	EventBus.game_state_changed.connect(_on_state_changed)
 	print("[AdManager] Provider: %s (ads %s)" % [
 		provider.get_script().get_global_name() if provider != null and provider.get_script() else "none",
@@ -83,10 +79,24 @@ func _ready() -> void:
 ## Web-portal and AdMob branches land with their providers in Phase 11.
 func _select_provider() -> AdProvider:
 	var env_override: String = OS.get_environment("CC_AD_PROVIDER")
+	if env_override == "" and OS.has_feature("web"):
+		var from_url: Variant = JavaScriptBridge.eval(
+			"new URLSearchParams(window.location.search).get('cc_ad_provider') || ''")
+		if from_url is String:
+			env_override = from_url
 	if env_override == "null":
 		return AdProviderNull.new()
 	if env_override == "mock":
 		return AdProviderMock.new()
+	# §45.1 runtime selection.
+	if OS.has_feature("web"):
+		if AdProviderWebPortal.portal_detected():
+			return AdProviderWebPortal.new()
+		if _config != null and _config.use_mock_in_editor and OS.is_debug_build():
+			return AdProviderMock.new()  # local browser test without a portal
+		return AdProviderNull.new()
+	if OS.has_feature("mobile") and AdProviderAdMob.plugin_present():
+		return AdProviderAdMob.new()
 	if _config != null and _config.use_mock_in_editor and (OS.has_feature("editor") or OS.is_debug_build()):
 		return AdProviderMock.new()
 	return AdProviderNull.new()
@@ -94,6 +104,13 @@ func _select_provider() -> AdProvider:
 
 func _on_run_started() -> void:
 	_session_runs += 1
+	if provider is AdProviderWebPortal:
+		provider.notify_gameplay_start()
+
+
+func _on_player_died_portal() -> void:
+	if provider is AdProviderWebPortal:
+		provider.notify_gameplay_stop()
 
 
 func _on_state_changed(_from: int, _to: int) -> void:
@@ -188,6 +205,11 @@ func request_ad(placement: int, bypass_pacing: bool = false) -> AdResult:
 	if _busy:
 		_log_decision("request %s BLOCKED reason=busy" % AdPlacementId.name_of(placement))
 		return AdResult.from_code(AdResult.Code.BLOCKED)
+	# §45.8: consent gate — DECLINED means no serving, politely.
+	if not ConsentManager.is_granted():
+		_log_decision("request %s BLOCKED reason=no-consent" % AdPlacementId.name_of(placement))
+		Analytics.track(&"ad_blocked", {"placement": placement, "reason": "no-consent"})
+		return AdResult.disabled()
 	# Null provider fast path: ads disabled — never touch the game state.
 	if provider is AdProviderNull or provider == null:
 		_log_decision("request %s BLOCKED reason=provider-disabled" % AdPlacementId.name_of(placement))

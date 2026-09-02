@@ -10,6 +10,13 @@ extends Node
 ## test_meta.gd (static scan of snake_controller.gd for "skin").
 
 const SKINS_DIR: String = "res://resources/skins"
+## Exported pcks expose NO res:// directory listings (DirAccess returns
+## empty — caught live in the web build: "no skin definitions found"), so
+## the catalogue loads from this const id list. Adding a skin = add the
+## .tres AND one id here.
+const SKIN_IDS: PackedStringArray = [
+	"classic", "neon", "circuit", "crystal", "magma", "void", "verdant", "prism",
+]
 
 var _defs: Array[SkinDef] = []
 
@@ -20,19 +27,14 @@ func _ready() -> void:
 
 func _load_catalogue() -> void:
 	_defs.clear()
-	var dir: DirAccess = DirAccess.open(SKINS_DIR)
-	if dir == null:
-		push_warning("[SkinManager] skins directory missing.")
-		return
-	dir.list_dir_begin()
-	var file_name: String = dir.get_next()
-	while file_name != "":
-		if file_name.ends_with(".tres"):
-			var def: SkinDef = load(SKINS_DIR + "/" + file_name) as SkinDef
-			if def != null:
-				_defs.append(def)
-		file_name = dir.get_next()
-	dir.list_dir_end()
+	for id in SKIN_IDS:
+		var path: String = "%s/%s.tres" % [SKINS_DIR, id]
+		if not ResourceLoader.exists(path):
+			push_warning("[SkinManager] missing skin def %s" % path)
+			continue
+		var def: SkinDef = load(path) as SkinDef
+		if def != null:
+			_defs.append(def)
 	_defs.sort_custom(func(a: SkinDef, b: SkinDef) -> bool: return a.unlock_level < b.unlock_level)
 	if _defs.is_empty():
 		push_warning("[SkinManager] no skin definitions found.")

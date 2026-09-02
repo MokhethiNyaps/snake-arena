@@ -74,9 +74,18 @@ EMPTYTEST_60_FRAMES_OK
 * **Status at Phase 0:** not downloaded. URL verified reachable:
   `https://github.com/godotengine/godot/releases/download/4.7.2-stable/Godot_v4.7.2-stable_export_templates.tpz`
   (the GitHub release asset redirects to the CDN correctly).
-* Plan: install into `~/.local/share/godot/export_templates/4.7.2.stable/` during
-  Phase 11 when the Web export preset is built. The Web template alone is what
-  we need for the primary target.
+* **Installed 2026-09-02 (Phase 11):** web export templates (`web_*.zip` +
+  `version.txt`) live in `/var/tmp/godot_templates/4.7.2.stable/` with a
+  SYMLINK from `~/.local/share/godot/export_templates/4.7.2.stable`.
+  `/var/tmp` is OUTSIDE the workspace snapshot (a full pack is ~1.2 GB and
+  `/tmp` is a 993 MB tmpfs — too small), so a FRESH SESSION must reinstall:
+  download `Godot_v4.7.2-stable_export_templates.tpz` from the
+  godot-builds release, `unzip` it, copy `templates/web_*.zip` +
+  `templates/version.txt` into the dir above, and symlink. The committed
+  reproducible build script is `tools/build_web.sh`.
+* In-browser verification toolchain (installed via apt/npm): `chromium` +
+  `playwright-core`, driven by the committed `tools/webverify.js` —
+  SwiftShader WebGL2 renders the full game headless.
 
 ## 4. Git / repo access
 

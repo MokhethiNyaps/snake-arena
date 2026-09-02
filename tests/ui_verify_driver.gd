@@ -165,6 +165,19 @@ func _run() -> void:
 	if _director == null:
 		_fail("run_director missing")
 		return
+	# S0 — §45.8 consent screen on fresh installs: ACCEPT it with a real
+	# click, then the run starts (boot awaited consent_resolved).
+	var s0: Control = _screen()
+	if s0 != null and s0.name.to_lower().contains("consent"):
+		var accept: Button = _find_button(s0, "BtnAccept")
+		if accept == null:
+			_fail("consent screen missing ACCEPT")
+			return
+		await _click(accept)
+		print("CC_UI_CONSENT_ACCEPTED state=%s" % ConsentManager.ConsentState.keys()[ConsentManager.state])
+		if ConsentManager.state != ConsentManager.ConsentState.GRANTED:
+			_fail("consent ACCEPT did not persist GRANTED")
+			return
 	# Combat is live (decision #47): god-mode the player for the whole
 	# scenario EXCEPT the scripted deaths (removed in _kill_player).
 	if _director._snake != null:
