@@ -85,13 +85,13 @@ EMPTYTEST_60_FRAMES_OK
 | Repo | `https://github.com/MokhethiNyaps/snake-arena.git` (branch `main`) |
 | Clone / pull | ✅ works |
 | Commit | ✅ works locally (identity: `ArenaAI Agent <agent@arena.ai>` — change if you prefer different attribution) |
-| **Push** | ❌ **BLOCKED — no credentials.** No token, no credential helper, prompts disabled. See §5. |
+| **Push** | ✅ works (2026-09-02): human-provided fine-grained PAT, stored ONLY in `~/.git-credentials` via `credential.helper store` — that file and `.git/config` are excluded from workspace snapshots, so a FRESH session loses both: re-add the remote (`tools/setup_env.sh` does) and re-provide the token (or push locally). Token value is intentionally NOT recorded here. |
 
 ## 5. Blockers (Phase 0)
 
 | # | Blocker | Impact | Needed from the human |
 |---|---|---|---|
-| 1 | **No GitHub push credentials** | Work is committed locally but cannot reach the remote until this is fixed | A fine-grained PAT (scope: this repo, Contents: Read/Write) or SSH key. Options: (a) paste a token in chat and the agent will store it only in the sandbox's credential helper; (b) the human runs `git push` themselves. Either way the agent's local commits are ready. |
+| 1 | ~~No GitHub push credentials~~ **RESOLVED 2026-09-02** — PAT pasted in chat, first push succeeded (`7c3fb2d..5b9ba5a`). Residual: the credential is session-scoped (see §4) and the token was exposed in chat — the human should rotate it once the engagement ends. | n/a — resolved. |
 | 2 | No GPU / no audio / no real devices in sandbox | Perf budgets, audio quality, touch feel, real ads must be validated by a human on real hardware (expected — see §47) | Later phases: manual test runs per `docs/HUMAN_TASKS.md`. Not urgent now. |
 
 ## 6. Command cheat-sheet (used in every phase report)
