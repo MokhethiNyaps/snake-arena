@@ -104,6 +104,32 @@ func collect_near(pos: Vector3, radius: float) -> Array[Dictionary]:
 	return out
 
 
+## Phase 12 leak fix (caught by the §48 soak/edge harnesses: +430 live
+## nodes per restart): pooled nodes are parented to the registry container,
+## NOT to this manager — freeing the arena alone left every ACTIVE node
+## marked acquired forever, draining the pool so each new run minted a
+## fresh batch. Hand EVERYTHING back when the manager leaves the tree.
+func _exit_tree() -> void:
+	for id in _alive.keys():
+		var node: CollectibleNode = _alive.get(id) as CollectibleNode
+		if node == null:
+			continue
+		_hash.remove(id)
+		node.deactivate()
+		ObjectPoolRegistry.release(POOL_COLLECTIBLE, node)
+	_alive.clear()
+	for b in _burst_nodes:
+		if is_instance_valid(b):
+			ObjectPoolRegistry.release(POOL_BURST, b)
+	_burst_nodes.clear()
+	_burst_timers.clear()
+	for l in _label_nodes:
+		if is_instance_valid(l):
+			ObjectPoolRegistry.release(POOL_LABEL, l)
+	_label_nodes.clear()
+	_label_timers.clear()
+
+
 ## Releases a live collectible back to the pool.
 func _absorb(node: CollectibleNode) -> void:
 	var id: int = node.get_instance_id()

@@ -60,9 +60,18 @@ in the final report (§49.11).
 | Consent flow (§45.8) + Settings re-entry + CCPA link | `scripts/ui/consent_screen.gd`, `scenes/ui/consent.tscn`, `scripts/autoload/consent_manager.gd`, `scripts/ui/settings_screen.gd` | UI harness (native + browser): ACCEPT persists GRANTED; DECLINE blocks ads, game playable | Delete the game's user data, relaunch → consent screen; DECLINE → play ad-free; SETTINGS → AD PRIVACY to change |
 | Remote config + analytics events (§45.10) | `scripts/autoload/remote_config.gd`, `scripts/autoload/analytics.gd` | Unit tests (seam + counters); no live endpoint by design | When you have an endpoint: put the URL in `ads.tres remote_config_url`, host `{"balance/arena_radius": 130.0}`-style JSON, relaunch — value applies |
 
+### Phase 12 — Harden (2026-09-02)
+| Item | Files | Verified by | Human one-step check |
+|---|---|---|---|
+| Edge-case suite E1-E5 (0 AI, 240 segments, instant death, 8x spam-restart + menu flips, alt-tab mid-ad) | `tests/edge_driver.gd` | `CC_EDGE_VERIFY_PASS` under xvfb: E1 8 s zero-AI run; E2 segs=240; E3 GAME_OVER+panel in 0.6 s; E4 node drift 1001 to 971 (leak-free, was +431/cycle); E5 mid-ad focus-out resolves ad, restores state, unsuspends input | Run `xvfb-run -a env CC_EDGE=1 CC_AD_PROVIDER=mock godot --path . --resolution 1280x720` (approx 80 s) |
+| Pool-drain leak fixes (collectibles + powerups `_exit_tree` release-all) | `scripts/systems/collectible_manager.gd`, `scripts/systems/powerup_manager.gd` | E4 spam-restart drift gate (max 40 nodes); 30-min soak node/orphan curves flat | Just play: restart runs repeatedly; node count in PerfHUD (F3) stays level |
+| 30-min soak (play-die-restart loop, menu every 3 cycles, mock ad every 2) | `tests/soak_driver.gd` | `CC_SOAK_PASS` — node growth under 25 pct first-vs-last quarter, orphan growth under 50, memory sampled every 15 s | Run with `CC_SOAK=1 CC_SOAK_MINUTES=30 CC_AD_PROVIDER=mock` under xvfb if you want to watch it |
+| §19 CPU-side budget profile | headless no-render run | 240 segments: avg 6.9 ms / max 6.9 ms / 0-of-300 frames over 20 ms — sim+logic well inside 16.6 ms | GPU-side numbers need real hardware (see PART C) |
+
 ---
 
 ## PART B — What the AI CANNOT do at all, and why
+
 
 **Accounts, credentials, and contracts — I have no ability to create or hold these:**
 1. Create a Google AdMob account, an app entry, and real ad unit IDs. *You must do this, then paste the IDs into `resources/config/ads.tres`.* Google's official test IDs ship as defaults.
@@ -110,6 +119,7 @@ in the final report (§49.11).
 
 | What | Untested aspect | Risk | How the human should test |
 |---|---|---|---|
+| **§19 perf budgets on a real GPU** (Phase 12) | CPU side measured headless (6.9 ms avg at 240 segs, 0 frames over 20 ms); the sandbox GPU is llvmpipe software rendering — its ~74 ms frame times say nothing about real hardware, and draw-call count / per-system ms split / MultiMesh tier banding (#72) cannot be checked here | **Medium** | Launch on real GPU, F3 PerfHUD: confirm 150 or fewer draw calls, 60 FPS with 9 grown snakes (240-seg E2 shape), per-system ms table vs §19 allocations |
 | Rendered arena visuals | Correctness verified via software-rendered (llvmpipe) screenshots only; no GPU | Low | Open the project in the Godot editor on a real GPU; the circular arena with cyan boundary wall and red outer ring should render at 60 FPS |
 | Input Map events | Actions verified to exist with correct keycodes; physical feel untested | Low | Launch, press WASD/arrows/Space/F3 — steering vector and boost signals fire (debug printouts until Phase 2) |
 | §7 touch scheme FEEL | End-to-end emulated-touch paths are now machine-verified (taps navigate menus, joystick steering turns the snake — decision #63), but no real touchscreen exists in the sandbox; thumb feel, the 1.35× invisible touch-target margin, and double-tap-hold ergonomics are unverified | Medium | Run on an Android phone (`godot` remote debug or an export build): drag anywhere left-of-centre to steer, double-tap-and-hold to boost |

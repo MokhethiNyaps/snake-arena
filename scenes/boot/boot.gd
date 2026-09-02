@@ -66,12 +66,18 @@ func _ready() -> void:
 	var forced_run: bool = not ui_verify and (
 		_env_or_url("CC_SMOKE_TEST") != ""
 		or OS.get_environment("CC_SCREENSHOT") != ""
-		or OS.get_environment("CC_RUN_TESTS") != "")
+		or OS.get_environment("CC_RUN_TESTS") != ""
+		or OS.get_environment("CC_SOAK") != ""
+		or OS.get_environment("CC_EDGE") != "")
 	# The UI driver must exist BEFORE the consent await (it is what clicks
 	# ACCEPT on the fresh-install consent screen).
 	if ui_verify:
 		var driver: Node = (load("res://tests/ui_verify_driver.gd") as GDScript).new()
 		add_child(driver)
+	if OS.get_environment("CC_SOAK") != "":
+		add_child((load("res://tests/soak_driver.gd") as GDScript).new())
+	if OS.get_environment("CC_EDGE") != "":
+		add_child((load("res://tests/edge_driver.gd") as GDScript).new())
 	# §45.8: consent resolves BEFORE any menu/run. Web portals defer to the
 	# portal (no double-prompt); headless CI paths auto-grant the dev
 	# default (no clicker exists); real first launches show the screen.

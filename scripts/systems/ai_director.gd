@@ -133,6 +133,15 @@ func _on_ai_died(_snake: SnakeController) -> void:
 	_pending_respawns.append(balance.ai_respawn_delay)
 
 
+## Phase 12 edge case (§48 "0 AI"): remove every AI immediately and cancel
+## pending respawns. Public on purpose — special modes may want it too.
+func despawn_all() -> void:
+	_pending_respawns.clear()
+	for ai in ai_controllers:
+		ai.queue_free()
+	ai_controllers.clear()
+
+
 ## Called by CombatManager once the corpse dissolve finishes: drops the
 ## dead AI from the registry and frees its node. The respawn timer (from
 ## _on_ai_died) is already running.

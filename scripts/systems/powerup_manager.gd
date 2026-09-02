@@ -35,6 +35,19 @@ var player_snake: SnakeController = null
 
 var _rng: RandomNumberGenerator = RandomNumberGenerator.new()
 var _pickups: Array[Dictionary] = []   # {node, def}
+
+
+## Phase 12 leak fix (same class as CollectibleManager's): pooled pickups
+## are parented to the registry container — return EVERYTHING on teardown
+## or the pool drains and every restart mints a fresh batch.
+func _exit_tree() -> void:
+	for entry in _pickups:
+		var node: Node3D = entry.get("node") as Node3D
+		if node != null and is_instance_valid(node):
+			if node.has_method("deactivate"):
+				node.call("deactivate")
+			ObjectPoolRegistry.release(POOL_POWERUP, node)
+	_pickups.clear()
 var _refill_accumulator: float = 0.0
 # Per-snake active effects: snake_id -> [{def, until, aura}]
 var _active: Dictionary = {}
