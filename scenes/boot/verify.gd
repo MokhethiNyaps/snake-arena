@@ -489,9 +489,18 @@ func _physics_process(delta: float) -> void:
 				var mult: float = _snake.stat_stack.get_multiplier(SnakeController.STAT_SPEED)
 				print("CC_VERIFY_POWERUP surge_active=%d speed_mult=%.2f pickups=%d" % [
 					active, mult, pm.alive_pickup_count()])
-				if active < 1 or absf(mult - 1.35) > 0.01:
+				# 1.35 = SURGE alone; 1.35×0.7 = SURGE while a nearby AI's CHILL
+				# aura suppresses us (AI wear readable buffs too, decision #49).
+				var mult_ok: bool = absf(mult - 1.35) <= 0.01 or absf(mult - 1.35 * 0.7) <= 0.02
+				if active < 1 or not mult_ok:
 					_fail("surge pickup failed (active=%d mult=%.2f)" % [active, mult])
 					return
+				# Deterministic cap/evict/refresh scenario: the player has
+				# coasted for ~40 s and may hold stray arena pickups — strip
+				# them so the eviction order below is fixed (a stray AEGIS
+				# used to get evicted by the SURGE re-apply, flipping the
+				# consume-on-consult check).
+				pm.clear_effects(_snake)
 				# Cap-3: three more types → SURGE (oldest) is evicted.
 				pm.apply(_snake, pm.table.get_def(PowerUpDef.Effect.MAGNET))
 				pm.apply(_snake, pm.table.get_def(PowerUpDef.Effect.AEGIS))
@@ -512,7 +521,8 @@ func _physics_process(delta: float) -> void:
 				print("CC_VERIFY_POWERUP2 cap=%d/%d capped=%s refresh=%.2f->%.2f doubler=%.1f aegis=%s" % [
 					capped, pm.table.max_active_powerups, capped_ok, before_refresh, after_refresh, mult2, aegis_ok])
 				if not (capped_ok and refresh_ok and absf(mult2 - 2.0) < 0.01 and aegis_ok):
-					_fail("cap/refresh/doubler/aegis checks failed")
+					_fail("cap/refresh/doubler/aegis checks failed (capped=%s refresh=%s doubler=%s aegis=%s)" % [
+						capped_ok, refresh_ok, absf(mult2 - 2.0) < 0.01, aegis_ok])
 					return
 				_enter_phase(21)
 			if _phase_waited_s() > 8.0:

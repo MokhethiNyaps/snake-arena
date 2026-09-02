@@ -7,6 +7,7 @@ script = ExtResource("1")
 arena_radius = 120.0
 soft_zone_width = 8.0
 soft_zone_slow_multiplier = 0.85
+soft_zone_push_strength = 2.0
 free_growth_window = 20.0
 ramp_end_time = 60.0
 shrink_start_time = 180.0

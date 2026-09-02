@@ -280,6 +280,22 @@ func effect_remaining(snake: SnakeController, effect: PowerUpDef.Effect) -> floa
 	return -1.0
 
 
+## Test/harness aid: strip every active effect from a snake (stat-stack
+## modifiers + auras removed through the normal teardown path). Used by the
+## verify harness to make cap/evict/refresh scenarios deterministic — the
+## player coasts for ~40 s before the Phase 7 check and can legitimately
+## pick up stray arena pickups that shift list order (an AEGIS picked up
+## mid-drift got evicted by the harness's own SURGE re-apply, flipping the
+## consume-on-consult expectation).
+func clear_effects(snake: SnakeController) -> void:
+	var id: int = snake.get_instance_id()
+	var list: Array = _active.get(id, [])
+	for e in list:
+		_remove_effect(e)
+	list.clear()
+	_active.erase(id)
+
+
 func alive_pickup_count() -> int:
 	return _pickups.size()
 

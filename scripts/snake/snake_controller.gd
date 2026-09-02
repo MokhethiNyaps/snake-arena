@@ -158,6 +158,13 @@ func _tick_movement(delta: float) -> void:
 	speed *= stat_stack.get_multiplier(STAT_SPEED)
 	speed *= _soft_zone_factor()
 	var move: Vector3 = MathUtil.angle_deg_to_xz_direction(facing_angle_deg) * speed * delta
+	# §3.5: the soft zone pushes the head inward, scaled by depth (full
+	# strength at the wall). Gentle by design — it steers drifters back,
+	# it never traps anyone against the boundary.
+	var radial: float = global_position.length()
+	if radial > soft_zone_inner and radial > 0.0001:
+		var push: float = _balance().soft_zone_push_strength * _soft_zone_depth(radial) * delta
+		move -= global_position / radial * push
 	global_position = _clamp_to_arena(global_position + move)
 	history.push(global_position, config.history_sample_distance)
 
@@ -180,8 +187,10 @@ func _resolve_steer_input() -> Vector3:
 	return (_steer_target - global_position) * Vector3(1, 0, 1)
 
 
-## §3.5 soft zone: slow 0.85x, push inward; hard wall slides. Applied as a
-## position clamp + speed factor (AI treats the zone as hazard in Phase 5).
+## §3.5 soft zone: slow 0.85x toward the wall, push inward; hard wall
+## clamps the outward velocity component away while tangential movement
+## keeps sliding. Applied as a position clamp + speed factor (AI treats
+## the zone as hazard in Phase 5).
 var _was_in_soft_zone: bool = false
 
 
@@ -205,10 +214,24 @@ func _soft_zone_factor() -> float:
 	var soft_start: float = soft_zone_inner
 	if r < soft_start:
 		return 1.0
-	if r >= arena_radius:
+	# §3.5: at (or beyond, mid-shrink) the wall the factor floors at the
+	# soft-zone minimum — NEVER zero. The clamp kills the outward velocity
+	# component; tangential movement must keep sliding ("slide along it").
+	# A zero factor froze wall-pinned snakes alive forever (caught by the
+	# Phase 5 verify flake: an AI travelled 0.0 units for 6+ s).
+	var depth: float = clampf(
+		(r - soft_start) / maxf(0.0001, arena_radius - soft_start), 0.0, 1.0)
+	return 1.0 - (1.0 - _balance().soft_zone_slow_multiplier) * depth
+
+
+## §3.5: soft-zone depth in [0, 1] (0 = inner edge, 1 = wall). Shared by
+## the slow curve and the inward push.
+func _soft_zone_depth(r: float) -> float:
+	if r <= soft_zone_inner:
 		return 0.0
-	var depth: float = (r - soft_start) / (arena_radius - soft_start)
-	return 1.0 - (1.0 - _balance().soft_zone_slow_multiplier) * clampf(depth, 0.0, 1.0)
+	return clampf(
+		(r - soft_zone_inner) / maxf(0.0001, arena_radius - soft_zone_inner), 0.0, 1.0)
+
 
 
 func _clamp_to_arena(pos: Vector3) -> Vector3:

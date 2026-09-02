@@ -14,6 +14,11 @@ extends Resource
 @export var soft_zone_width: float = 8.0
 ## Movement speed multiplier while inside the soft zone.
 @export_range(0.0, 1.0) var soft_zone_slow_multiplier: float = 0.85
+## Inward push strength at the wall (units/s), scaled by soft-zone depth
+## (§3.5 "push you inward"). Full strength at the boundary, zero at the
+## inner edge. Gentle by design: it bends drifters back toward the arena,
+## it never overpowers steering.
+@export_range(0.0, 30.0) var soft_zone_push_strength: float = 2.0
 
 @export_group("Session / difficulty curve (§3.6)")
 ## Seconds at run start with no AI near spawn; free growth window.

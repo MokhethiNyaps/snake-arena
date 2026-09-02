@@ -23,6 +23,13 @@ in the final report (§49.11).
 | Arena scene (ground/boundary/soft ring/lighting) | `scenes/arena/*`, `scenes/boot/*` | rendered screenshot under Xvfb (non-blank, pixel-verified) | `xvfb-run -a -s "-screen 0 1280x720x24" env CC_SCREENSHOT=/tmp/cc.png godot --path . --resolution 1280x720` |
 | Docs: ENVIRONMENT, TESTING, DEVIATIONS, DECISION_LOG, CREDITS | `docs/*.md`, `assets/CREDITS.md` | files committed & pushed | read them |
 
+### Phases 2–7 (previous agent's verified work, re-verified 2026-09-02 by the current agent)
+| Item | Files | Verified by | Human one-step check |
+|---|---|---|---|
+| Snake body/movement/camera, economy, ad scaffolding, AI opponents, conflict, verbs (Phases 2–7) | `scripts/`, `scenes/`, `tests/` (per-phase details in `docs/TESTING.md` results log) | Full suite re-run **100/100 green** and the live verify harness re-run **6/6 PASS** on 2026-09-02 (after the wall-freeze fix below) | `godot --headless --path . --script res://tests/run_tests.gd` |
+| Wall-freeze fix: §3.5 slide restored (factor floored at 0.85 at the wall, never 0.0) + soft-zone inward push (`soft_zone_push_strength`) | `scripts/snake/snake_controller.gd`, `scripts/config/game_balance_config.gd`, `resources/config/game_balance.tres`, decisions #51/#52 | 5 new regression tests (`tests/test_wall_slide.gd`) green; harness AI-window flake (was failing 2-of-3 runs: "AI travelled 0.0 units for 6 s") gone — 6/6 consecutive full-harness passes | same test command, then `xvfb-run -a -s "-screen 0 1280x720x24" godot --path . --resolution 1280x720 res://scenes/boot/verify.tscn` (expect `CC_VERIFY_PASS`, exit 0) |
+| Verify-harness Phase 7 determinism: `PowerUpManager.clear_effects()` test aid + chill-tolerant SURGE check (harness-only fix, decision #53) | `scripts/systems/powerup_manager.gd`, `scenes/boot/verify.gd` | Harness powerup scenario deterministic across 6/6 runs | same harness command |
+
 ---
 
 ## PART B — What the AI CANNOT do at all, and why
