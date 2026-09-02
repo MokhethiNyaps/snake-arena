@@ -369,6 +369,30 @@ func _add_head_area() -> void:
 	add_child(area)
 
 
+## §45.5 revive path: restore at `new_power` at a safe point, body
+## rebuilt from scratch (the corpse trail must not follow us), alive again.
+func revive_at(pos: Vector3, new_power: float) -> void:
+	if body != null:
+		body.set_target_segment_count(0)
+	power = maxf(config.start_power, new_power)
+	alive = true
+	boosting = false
+	_boost_requested = false
+	_has_steer_target = false
+	_mote_accumulator = 0.0
+	global_position = Vector3(pos.x, 0.0, pos.z)
+	stat_stack.clear()
+	if history != null:
+		history.reset(global_position)
+	_update_derived_stats()
+	_segments_target = _segments_for_power(power)
+	if body != null:
+		body.spawn_segments(_segments_target)
+	_sync_segment_target()
+	power_changed.emit(power)
+	TestSignalHost.relay(get_instance_id(), &"power_changed", power)
+
+
 ## Human/debug-friendly state dump (10 Hz use, not hot path).
 func debug_line() -> String:
 	return "%s pwr=%.1f tier=%d len=%d speed=%.2f turn=%.0f r=%.2f boost=%s pos=(%.1f, %.1f)" % [

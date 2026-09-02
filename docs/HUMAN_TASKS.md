@@ -30,6 +30,13 @@ in the final report (§49.11).
 | Wall-freeze fix: §3.5 slide restored (factor floored at 0.85 at the wall, never 0.0) + soft-zone inward push (`soft_zone_push_strength`) | `scripts/snake/snake_controller.gd`, `scripts/config/game_balance_config.gd`, `resources/config/game_balance.tres`, decisions #51/#52 | 5 new regression tests (`tests/test_wall_slide.gd`) green; harness AI-window flake (was failing 2-of-3 runs: "AI travelled 0.0 units for 6 s") gone — 6/6 consecutive full-harness passes | same test command, then `xvfb-run -a -s "-screen 0 1280x720x24" godot --path . --resolution 1280x720 res://scenes/boot/verify.tscn` (expect `CC_VERIFY_PASS`, exit 0) |
 | Verify-harness Phase 7 determinism: `PowerUpManager.clear_effects()` test aid + chill-tolerant SURGE check (harness-only fix, decision #53) | `scripts/systems/powerup_manager.gd`, `scenes/boot/verify.gd` | Harness powerup scenario deterministic across 6/6 runs | same harness command |
 
+### Phase 8 — Interface (2026-09-02)
+| Item | Files | Verified by | Human one-step check |
+|---|---|---|---|
+| Full UI layer: HUD (score+combo ring, live leaderboard 4 Hz, minimap w/ threat colours + shrink ring + surge marker, power pill, boost ring, power-up chips w/ radial timers, event banners, banner-ad safe bottom margin, safe-area insets), Boot→Menu→Run→Pause→GameOver→Menu flow, FTUE hint cards, settings (audio buses/shake/minimap/floating numbers/high-contrast — applied immediately + persisted), how-to-play, game-over count-ups + rewarded REVIVE (65 % power, single use) + PLAY AGAIN (never disabled) + ×2 coins button, INTER_RUN/MENU_RETURN pacing wired | `scripts/ui/*.gd`, `scenes/ui/*.tscn`, `scenes/boot/boot.gd` (run director), `scripts/autoload/ui_manager.gd` | UI harness `CC_UI_VERIFY=1` **5/5 consecutive passes** (landscape) + portrait pass; every screen pixel-verified; suite 108/108 | `xvfb-run -a -s "-screen 0 1280x720x24" env CC_UI_VERIFY=1 CC_UI_SHOTS=/tmp/s godot --path . --resolution 1280x720` (expect `CC_UI_VERIFY_PASS`, exit 0) |
+| §7 input schemes completed: mouse raycast steering (default, 1.2 u head-anchored dead zone), touch dynamic joystick (left 65 %, 90 px radius, 12 px dead zone, double-tap-hold boost), gamepad stick; scheme auto-detect | `scripts/autoload/input_manager.gd`, `scripts/player/player_controller.gd` | `tests/test_input_schemes.gd` (4 tests) + live mouse-steer check inside the UI harness (Δ≈98.5° turn) | same UI harness command; then play with a mouse — the snake follows the cursor |
+| §3.6 free-growth window enforced + ContextSteering origin-relative dangers (bug fix) | `scripts/ai/ai_controller.gd`, `scripts/ai/context_steering.gd` | Regression test + gameplay harness PASS (AI budget 0.78 ms vs 2.50) | `godot --headless --path . --script res://tests/run_tests.gd` |
+
 ---
 
 ## PART B — What the AI CANNOT do at all, and why
@@ -82,6 +89,10 @@ in the final report (§49.11).
 |---|---|---|---|
 | Rendered arena visuals | Correctness verified via software-rendered (llvmpipe) screenshots only; no GPU | Low | Open the project in the Godot editor on a real GPU; the circular arena with cyan boundary wall and red outer ring should render at 60 FPS |
 | Input Map events | Actions verified to exist with correct keycodes; physical feel untested | Low | Launch, press WASD/arrows/Space/F3 — steering vector and boost signals fire (debug printouts until Phase 2) |
+| §7 touch scheme FEEL | End-to-end emulated-touch paths are now machine-verified (taps navigate menus, joystick steering turns the snake — decision #63), but no real touchscreen exists in the sandbox; thumb feel, the 1.35× invisible touch-target margin, and double-tap-hold ergonomics are unverified | Medium | Run on an Android phone (`godot` remote debug or an export build): drag anywhere left-of-centre to steer, double-tap-and-hold to boost |
+| HUD readability on small screens | Pixel-verified at 1280×720 and 720×1280 under llvmpipe only; real-device DPI, notch insets, and sunlight readability untested | Medium | Play one run on a mid-range phone in both orientations; check score/leaderboard/power pill/boost ring legibility |
+| Gamepad scheme | Left-stick vector path unit-level only; no physical gamepad in sandbox | Low | Plug in a gamepad, steer with the left stick, boost with A/cross |
+| UI feel (fades, count-up pacing, button sizes) | Functional correctness verified; subjective feel is human judgement (§47) | Low | Play to game-over twice: watch the count-up tween, revive flow, PLAY AGAIN prominence |
 
 *(This table grows every phase. Everything listed in Part B is also, by definition, unverifiable by me.)*
 

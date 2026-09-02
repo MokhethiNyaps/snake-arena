@@ -44,6 +44,9 @@ var _t: float = 0.0
 # Per-instance VFX timers (parallel arrays, only active entries iterated).
 var _burst_nodes: Array[Node] = []
 var _burst_timers: Array[float] = []
+## §14 gameplay setting: floating score numbers on/off (HUD applies live).
+var floating_labels_enabled: bool = true
+
 var _label_nodes: Array[Node] = []
 var _label_timers: Array[float] = []
 
@@ -123,6 +126,8 @@ func _fire_burst(def: CollectibleDef, pos: Vector3) -> void:
 
 
 func _fire_label(def: CollectibleDef, pos: Vector3, score: float) -> void:
+	if not floating_labels_enabled:
+		return
 	var node: FloatingLabel = ObjectPoolRegistry.acquire(POOL_LABEL) as FloatingLabel
 	if node == null:
 		return

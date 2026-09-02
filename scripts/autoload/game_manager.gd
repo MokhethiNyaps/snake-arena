@@ -27,7 +27,7 @@ const _VALID_TRANSITIONS: Dictionary = {
 	State.PAUSED: [State.PLAYING, State.MENU, State.GAME_OVER],
 	State.PAUSED_FOR_AD: [State.PLAYING, State.PAUSED, State.MENU, State.GAME_OVER],
 	State.DYING: [State.GAME_OVER],
-	State.GAME_OVER: [State.MENU, State.LOADING, State.PAUSED_FOR_AD],
+	State.GAME_OVER: [State.MENU, State.LOADING, State.PAUSED_FOR_AD, State.PLAYING],
 }
 
 

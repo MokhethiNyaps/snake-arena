@@ -117,7 +117,19 @@ func _decide() -> void:
 	ctx["recover_active"] = _recover_until > ctx["now"]
 	var state: AIState = _fsm.pick(ctx)
 	visited_states[state.state_name] = int(visited_states.get(state.state_name, 0)) + 1
-	var heading: Vector3 = _steering.pick(state.interest_dir(ctx), state.dangers(ctx), ctx["me_facing"])
+	var dangers: Array = state.dangers(ctx)
+	# §3.6 free-growth window: "no AI within 35 units" for the first
+	# `free_growth_window` seconds. Spawn placement only enforced the FIRST
+	# moment — wandering AI could reach a fresh player in ~4 s. Implemented
+	# as a dominant steering danger anchored on the LIVE player (serves the
+	# rule's intent wherever the player drifts), fading out with the window.
+	if director.player_snake != null and director.now() < director.balance.free_growth_window:
+		dangers.append({
+			"pos": director.player_snake.global_position,
+			"radius": director.balance.ai_initial_spawn_distance,
+			"weight": 1.5,
+		})
+	var heading: Vector3 = _steering.pick(state.interest_dir(ctx), dangers, ctx["me_facing"], ctx["me_pos"])
 	heading = _apply_humanizing(ctx, heading)
 	if heading.length_squared() < 0.001:
 		heading = ctx["me_facing"]

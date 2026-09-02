@@ -17,9 +17,12 @@ const CONTINUITY_WEIGHT: float = 0.35
 ## directly ahead flips the heading even with interest behind it.
 const DANGER_WEIGHT: float = 1.8
 
-## danger = { pos: Vector3, radius: float, weight: float }
+## danger = { pos: Vector3, radius: float, weight: float } — WORLD positions;
+## `origin` is the deciding snake's position (dangers repel relative to IT,
+## never to the world origin — a snake at (100,0,0) once fled dangers near
+## the origin; caught while diagnosing the §3.6 free-growth window).
 ## Returns a normalized XZ heading.
-func pick(interest_dir: Vector3, dangers: Array, facing: Vector3) -> Vector3:
+func pick(interest_dir: Vector3, dangers: Array, facing: Vector3, origin: Vector3 = Vector3.ZERO) -> Vector3:
 	var interest: Vector3 = _xz_normalized(interest_dir)
 	var face: Vector3 = _xz_normalized(facing)
 	var best_dir: Vector3 = face
@@ -37,7 +40,7 @@ func pick(interest_dir: Vector3, dangers: Array, facing: Vector3) -> Vector3:
 			var weight: float = d["weight"]
 			if weight <= 0.0:
 				continue
-			var to_danger: Vector3 = dpos
+			var to_danger: Vector3 = dpos - origin
 			var dist: float = to_danger.length()
 			if dist < 0.001:
 				score -= weight * DANGER_WEIGHT

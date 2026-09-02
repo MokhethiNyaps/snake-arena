@@ -25,7 +25,12 @@ func _ready() -> void:
 
 ## Pushes a screen on top. Returns the instantiated Control.
 func push_screen(scene: PackedScene) -> Control:
-	var screen: Control = scene.instantiate()
+	return push_screen_instance(scene.instantiate())
+
+
+## Pushes an ALREADY-instantiated screen (callers that must configure the
+## screen before its _ready runs — e.g. the game-over stats snapshot).
+func push_screen_instance(screen: Control) -> Control:
 	_ui_root.add_child(screen)
 	_screen_stack.append(screen)
 	screen.modulate.a = 0.0

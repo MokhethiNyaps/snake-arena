@@ -102,6 +102,27 @@ func test_steering_avoids_danger() -> bool:
 	return true
 
 
+## Regression: dangers are relative to the DECIDING SNAKE, not the world
+## origin — a snake far from the origin must ignore dangers that are near
+## the origin but far from IT, and flee dangers near IT.
+func test_steering_danger_relative_to_snake() -> bool:
+	var cs: ContextSteering = ContextSteering.new()
+	# Snake at (100, 0, 0) interested in -X (away from origin); a danger at
+	# the origin is 100 u away — beyond radius 35 — and must NOT deflect.
+	var far_danger: Array = [{"pos": Vector3.ZERO, "radius": 35.0, "weight": 1.5}]
+	var h1: Vector3 = cs.pick(Vector3(-1, 0, 0), far_danger, Vector3(-1, 0, 0), Vector3(100, 0, 0))
+	if h1.dot(Vector3(-1, 0, 0)) < 0.99:
+		printerr("  distant origin-danger deflected the snake: %s" % str(h1))
+		return false
+	# Same snake, danger 5 u ahead of IT at (95, 0, 0): must turn away.
+	var near_danger: Array = [{"pos": Vector3(95, 0, 0), "radius": 35.0, "weight": 1.5}]
+	var h2: Vector3 = cs.pick(Vector3(-1, 0, 0), near_danger, Vector3(-1, 0, 0), Vector3(100, 0, 0))
+	if h2.dot(Vector3(-1, 0, 0)) > 0.0:
+		printerr("  heading %s still points into the near danger" % str(h2))
+		return false
+	return true
+
+
 # --- §8.2 Layer 1: FSM priority chain --------------------------------------
 
 func test_fsm_priority_chain() -> bool:

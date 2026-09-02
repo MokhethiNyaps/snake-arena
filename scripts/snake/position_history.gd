@@ -56,6 +56,19 @@ func push_force(pos: Vector3) -> void:
 	_push_sample(pos)
 
 
+## Clears the ring and re-seeds it at `pos` (revive/teleport: the old trail
+## must never be readable behind the new spawn point).
+func reset(pos: Vector3) -> void:
+	head_index = 0
+	count = 0
+	total_arc = 0.0
+	for c in cursors:
+		c.reset()
+	_write(0, pos, 0.0)
+	head_index = 1
+	count = 1
+
+
 ## The most recent sample (head position), or Vector3.INF if empty.
 func latest() -> Vector3:
 	if count == 0:
@@ -181,3 +194,9 @@ class HistoryCursor:
 	var index: int = 0
 	var arc: float = 0.0
 	var initialized: bool = false
+
+
+	func reset() -> void:
+		index = 0
+		arc = 0.0
+		initialized = false

@@ -39,6 +39,11 @@ func remove(stack_id: StringName, stat: StringName) -> void:
 			_mods.erase(stat)
 
 
+## Strips every modifier (revive path: the run resumes from a clean slate).
+func clear() -> void:
+	_mods.clear()
+
+
 func remove_all(stack_id: StringName) -> void:
 	for stat: StringName in _mods.keys():
 		var bucket: Dictionary = _mods[stat]

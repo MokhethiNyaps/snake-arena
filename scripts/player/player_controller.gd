@@ -36,7 +36,8 @@ func _physics_process(_delta: float) -> void:
 	if snake == null or not snake.alive:
 		return
 	if GameManager.is_in(GameManager.State.PLAYING) and not InputManager.is_suspended():
-		var steer: Vector3 = InputManager.get_steer_direction()
+		# §7: the head anchors the mouse dead zone (1.2 u around the player).
+		var steer: Vector3 = InputManager.get_steer_direction(snake.global_position)
 		if steer != Vector3.ZERO:
 			snake.set_steer_target(snake.global_position + steer * 30.0)
 		else:
