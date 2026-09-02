@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="SkinDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/config/skin_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "verdant"
+display_name = "Verdant"
+body_colour = Color(0.78, 1.00, 0.29, 1)
+emission_colour = Color(0.70, 1.00, 0.25, 1)
+emission_energy = 0.75
+head_colour = Color(0.88, 1.00, 0.55, 1)
+trail_colour = Color(0.80, 1.00, 0.35, 1)
+head_mesh_override = ""
+death_effect = ""
+unlock_level = 16
+price = 450

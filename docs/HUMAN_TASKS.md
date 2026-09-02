@@ -37,6 +37,15 @@ in the final report (§49.11).
 | §7 input schemes completed: mouse raycast steering (default, 1.2 u head-anchored dead zone), touch dynamic joystick (left 65 %, 90 px radius, 12 px dead zone, double-tap-hold boost), gamepad stick; scheme auto-detect | `scripts/autoload/input_manager.gd`, `scripts/player/player_controller.gd` | `tests/test_input_schemes.gd` (4 tests) + live mouse-steer check inside the UI harness (Δ≈98.5° turn) | same UI harness command; then play with a mouse — the snake follows the cursor |
 | §3.6 free-growth window enforced + ContextSteering origin-relative dangers (bug fix) | `scripts/ai/ai_controller.gd`, `scripts/ai/context_steering.gd` | Regression test + gameplay harness PASS (AI budget 0.78 ms vs 2.50) | `godot --headless --path . --script res://tests/run_tests.gd` |
 
+### Phase 9 — Meta (2026-09-02)
+| Item | Files | Verified by | Human one-step check |
+|---|---|---|---|
+| `save.json` v1: versioned + checksummed + atomic write; corruption → quarantine + defaults (never crashes); Phase 8 settings keys auto-migrate | `scripts/autoload/save_manager.gd` | 3 corruption unit tests + restart probe (`CC_RESTART_PROBE …` values reload in a fresh process) | Play 2 runs, restart the game — coins/level/best persist; then hand-corrupt `save.json` (edit a digit) and relaunch — game boots with defaults and `save.json.corrupt` appears next to it |
+| Coins/XP economy: 1 coin per 120 score + 25 top-3, XP=score/10, level curve 220·lvl^1.35, +50 coins per level; ×2-coins rewarded button pays real coins | `scenes/boot/boot.gd` (`_settle_meta`), `resources/config/meta.tres` | Unit tests + live save inspection after a real 3-run harness session | Play to game over — COINS row counts up; watch the ×2 COINS ad button double the payout |
+| 8 skins: level gates + coin prices, buy/equip, body tint keeps power-tier bands readable; SnakeController zero-skin-code invariant | `scripts/systems/skin_manager.gd`, `scripts/config/skin_def.gd`, `resources/skins/*.tres`, `scripts/snake/snake_body.gd` | Suite scan test + buy/equip tests | Earn coins → SKINS → buy + equip Neon → body tints pink/magenta while red-tier threats still read red |
+| Daily missions: 3/day deterministic, reroll once via rewarded ad, auto-reward | `scripts/systems/mission_manager.gd`, `scripts/ui/missions_screen.gd` | Unit tests (progress semantics, reward payout, reroll gate) | MISSIONS from the menu — complete one, watch coins land; REROLL works once per day |
+| §17 leaderboard architecture: `ILeaderboardBackend` → `LocalLeaderboardBackend` (top-20, date+skin), `LeaderboardManager` swap point | `scripts/systems/i_leaderboard_backend.gd`, `local_leaderboard_backend.gd`, `leaderboard_manager.gd` | Interface tests (order/cap/meta/new-best) | Die with a good score twice — both entries appear in order (high-score UI surfaces in Phase 10 polish) |
+
 ---
 
 ## PART B — What the AI CANNOT do at all, and why
@@ -93,6 +102,8 @@ in the final report (§49.11).
 | HUD readability on small screens | Pixel-verified at 1280×720 and 720×1280 under llvmpipe only; real-device DPI, notch insets, and sunlight readability untested | Medium | Play one run on a mid-range phone in both orientations; check score/leaderboard/power pill/boost ring legibility |
 | Gamepad scheme | Left-stick vector path unit-level only; no physical gamepad in sandbox | Low | Plug in a gamepad, steer with the left stick, boost with A/cross |
 | UI feel (fades, count-up pacing, button sizes) | Functional correctness verified; subjective feel is human judgement (§47) | Low | Play to game-over twice: watch the count-up tween, revive flow, PLAY AGAIN prominence |
+| Economy balance (coin prices, mission rewards, level curve pace) | Math verified; FUN/balance is human judgement — 150 coins for Neon takes ~2 good runs by design | Medium | Play 5 sessions: do missions/coins/skins create a reason to return tomorrow? Tune `resources/config/meta.tres` if not |
+| Skins shop + missions screen usability | Logic verified headless + screens built; visual layout tasted only via llvmpipe screenshots | Medium | Open SKINS/MISSIONS on a phone-sized window (720×1280): tiles readable, buttons thumb-sized |
 
 *(This table grows every phase. Everything listed in Part B is also, by definition, unverifiable by me.)*
 

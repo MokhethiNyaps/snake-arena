@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="MetaConfig" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/config/meta_config.gd" id="1_mcfg"]
+
+[resource]
+script = ExtResource("1_mcfg")
+coins_per_score = 120.0
+top3_coin_bonus = 25
+xp_per_score = 10.0
+level_coef = 220.0
+level_exp = 1.35
+level_up_coin_bonus = 50
+daily_mission_count = 3
+high_score_cap = 20

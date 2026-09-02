@@ -28,26 +28,44 @@ var _absorbed_this_run: int = 0
 var _death_power: float = 2.0
 var _death_length: int = 6
 var _best_score: float = 0.0
+## Phase 9 meta systems (children so they tick + receive events with us).
+var _skins: SkinManager = null
+var _missions: MissionManager = null
+var _leaderboards: LeaderboardManager = null
+## Coins earned by the LAST completed run (game-over "×2" doubles this).
+var _coins_earned_this_run: int = 0
 
 
 func _ready() -> void:
 	add_to_group("run_director")
+	_skins = SkinManager.new()
+	_skins.name = "SkinManager"
+	add_child(_skins)
+	_missions = MissionManager.new()
+	_missions.name = "MissionManager"
+	add_child(_missions)
+	_leaderboards = LeaderboardManager.new()
+	_leaderboards.name = "LeaderboardManager"
+	add_child(_leaderboards)
 	EventBus.player_died.connect(_on_player_died)
 	EventBus.snake_died.connect(_on_snake_died)
 	EventBus.game_state_changed.connect(_on_state_changed)
 	EventBus.settings_changed.connect(_on_setting_changed)
-	_best_score = float(SaveManager.get_setting("progress", "best_score", 0))
+	_best_score = SaveManager.get_best_score()
 	_apply_saved_audio()
 	var ui_verify: bool = OS.get_environment("CC_UI_VERIFY") != ""
 	if ui_verify:
 		# Fresh-install simulation: the UI driver re-runs the real flow.
 		DirAccess.remove_absolute("user://settings.cfg")
 		SaveManager._settings = ConfigFile.new()
+		DirAccess.remove_absolute("user://save.json")
+		DirAccess.remove_absolute("user://save.json.corrupt")
+		SaveManager.reset_for_verify()
 	var forced_run: bool = not ui_verify and (
 		OS.get_environment("CC_SMOKE_TEST") != ""
 		or OS.get_environment("CC_SCREENSHOT") != ""
 		or OS.get_environment("CC_RUN_TESTS") != "")
-	var ftue_done: bool = bool(SaveManager.get_setting("ftue", "completed", false))
+	var ftue_done: bool = SaveManager.is_ftue_done()
 	if ftue_done and not forced_run:
 		_to_menu()
 	else:
@@ -90,6 +108,10 @@ func _build_world() -> void:
 	_player = (load(PLAYER_SCENE) as PackedScene).instantiate()
 	add_child(_player)
 	_snake = _player.get_node("Snake")
+	# §16: skins are VISUAL-ONLY and applied at the SnakeBody layer — the
+	# controller never sees them (test-enforced invariant).
+	if _skins != null:
+		_skins.apply_equipped_to(_snake.body)
 	var rig: CameraRig = _player.get_node("CameraRig")
 	rig.set_target(_snake)
 	if _arena.has_method("setup_world"):
@@ -181,10 +203,10 @@ func _collect_stats() -> Dictionary:
 			if ai.snake != null:
 				entries.append({"name": ai.display_name, "power": ai.snake.power, "is_player": false, "id": 1})
 	var score: float = _arena.score_manager.get_score() if _arena != null and _arena.score_manager != null else 0.0
-	var new_best: bool = score > _best_score
+	var stats: Dictionary = _settle_meta(score, entries)
+	var new_best: bool = bool(stats.get("new_best", false))
 	if new_best:
 		_best_score = score
-		SaveManager.set_setting("progress", "best_score", score)
 	return {
 		"score": score,
 		"power": _death_power,
@@ -194,6 +216,8 @@ func _collect_stats() -> Dictionary:
 		"time_s": float(int(_arena.combat_manager._elapsed)) if _arena != null and _arena.combat_manager != null else 0.0,
 		"absorbed": _absorbed_this_run,
 		"new_best": new_best,
+		"coins": _coins_earned_this_run,
+		"level": SaveManager.get_level(),
 	}
 
 
@@ -249,10 +273,38 @@ func _safe_revive_position() -> Vector3:
 	return Vector3.ZERO
 
 
-## Rewarded ×2 coins (wallet lands in Phase 9; analytics now, §45.10).
+## §16 meta settlement — runs ONCE per run, at game over (never on revive).
+## Coins: floor(score/120) + 25 top-3 bonus. XP: score/10. Also: high-score
+## submit (with skin), daily missions, lifetime stats.
+func _settle_meta(score: float, entries: Array) -> Dictionary:
+	var cfg: MetaConfig = SaveManager.meta_config()
+	var coins: int = int(floor(score / cfg.coins_per_score))
+	var rank: int = LeaderboardSort.player_rank(entries)
+	if rank <= 3:
+		coins += cfg.top3_coin_bonus
+	_coins_earned_this_run = coins
+	if coins > 0:
+		SaveManager.add_coins(coins, &"run_payout")
+	var skin_id: String = _skins.get_equipped_id() if _skins != null else "classic"
+	var new_best: bool = _leaderboards.submit_run(score, {"skin": skin_id}) if _leaderboards != null else false
+	SaveManager.add_xp(int(floor(score / cfg.xp_per_score)))
+	SaveManager.record_run_finished(score, _absorbed_this_run)
+	var stats: Dictionary = {
+		"score": score, "rank": rank, "field_size": entries.size(),
+		"absorbed": _absorbed_this_run,
+	}
+	if _missions != null:
+		_missions.on_run_ended(stats)
+	return {"new_best": new_best}
+
+
+## Rewarded ×2 coins (§45.5): doubles the RUN payout only — no score effect.
 func grant_double_coins() -> void:
-	var coins: int = int(_arena.score_manager.get_score() / 120.0) * 2 if _arena != null and _arena.score_manager != null else 0
-	Analytics.track(&"coins_earned", {"amount": coins, "doubled": true})
+	if _coins_earned_this_run <= 0:
+		return
+	SaveManager.add_coins(_coins_earned_this_run, &"double_coins")
+	_coins_earned_this_run *= 2
+	Analytics.track(&"coins_earned", {"amount": _coins_earned_this_run, "doubled": true})
 
 
 # --- settings → live world -----------------------------------------------------

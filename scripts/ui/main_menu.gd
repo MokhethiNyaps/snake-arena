@@ -34,9 +34,15 @@ func _ready() -> void:
 	var how_b: Button = _button("HOW TO PLAY", _on_how, 22)
 	how_b.name = "BtnHowTo"
 	col.add_child(how_b)
+	var missions_b: Button = _button("MISSIONS", _on_missions, 22)
+	missions_b.name = "BtnMissions"
+	col.add_child(missions_b)
+	var skins_b: Button = _button("SKINS", _on_skins, 22)
+	skins_b.name = "BtnSkins"
+	col.add_child(skins_b)
 	col.add_child(_button("SETTINGS", _on_settings, 22))
 	var version: Label = _label(14, Color(0.5, 0.55, 0.6))
-	version.text = "v0.8.0-dev"
+	version.text = "v0.9.0-dev"
 	version.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
 	version.position = Vector2(10, -24)
 	add_child(version)
@@ -77,6 +83,14 @@ func _on_play() -> void:
 
 func _on_how() -> void:
 	UIManager.push_screen(load("res://scenes/ui/how_to_play.tscn"))
+
+
+func _on_missions() -> void:
+	UIManager.push_screen(load("res://scenes/ui/missions.tscn"))
+
+
+func _on_skins() -> void:
+	UIManager.push_screen(load("res://scenes/ui/skins.tscn"))
 
 
 func _on_settings() -> void:

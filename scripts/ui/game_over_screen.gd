@@ -43,7 +43,7 @@ func _ready() -> void:
 	col.add_child(_best_badge)
 	# Stats rows (values count up over 0.6 s).
 	for key in [["score", "SCORE"], ["power", "POWER"], ["length", "LENGTH"],
-			["rank", "RANK"], ["time", "TIME"], ["absorbed", "ABSORBED"]]:
+			["rank", "RANK"], ["time", "TIME"], ["absorbed", "ABSORBED"], ["coins", "COINS"]]:
 		var row: HBoxContainer = HBoxContainer.new()
 		row.add_theme_constant_override("separation", 12)
 		var name_l: Label = _label(20, Color(0.6, 0.7, 0.8))

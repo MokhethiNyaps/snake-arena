@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="SkinDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/config/skin_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "neon"
+display_name = "Neon"
+body_colour = Color(1.00, 0.24, 0.71, 1)
+emission_colour = Color(1.00, 0.20, 0.70, 1)
+emission_energy = 0.9
+head_colour = Color(1.00, 0.55, 0.85, 1)
+trail_colour = Color(1.00, 0.30, 0.75, 1)
+head_mesh_override = ""
+death_effect = ""
+unlock_level = 2
+price = 150

@@ -350,5 +350,5 @@ func _tick_ftue(delta: float) -> void:
 				_hint_card.visible = false)
 	elif _hint_index >= FTUE_HINTS.size() - 1 and _hint_timer > float(FTUE_HINTS[_hint_index][0]) + 5.0:
 		_ftue_active = false
-		SaveManager.set_setting("ftue", "completed", true)
+		SaveManager.set_ftue_done()
 		_hint_card.visible = false

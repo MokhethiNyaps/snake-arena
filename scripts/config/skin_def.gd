@@ -1,27 +1,24 @@
 class_name SkinDef
 extends Resource
-## §16 — One cosmetic skin. Purely visual; MUST never affect gameplay stats.
-##
-## Owns: mesh/material/colour data for a skin.
-## Does NOT own: application logic (SkinManager, Phase 9) — SnakeController
-##              must contain zero skin-specific code (§16).
-## Talks to: nothing; pure data.
+## §16 skin definition — PURELY COSMETIC. A skin may never touch gameplay
+## stats (SnakeController contains zero skin code by design; SkinManager
+## talks to SnakeBody's visual layer only).
 
-enum HeadMesh { DEFAULT_SPHERE, CRYSTAL, DIAMOND }
-enum DeathEffect { DEFAULT, SPARKLE, VOID }
-
+@export var id: String = "classic"
 @export var display_name: String = "Classic"
-## Head mesh override for this skin.
-@export var head_mesh: HeadMesh = HeadMesh.DEFAULT_SPHERE
-## Body material base colour.
-@export var body_color: Color = Color(0.2, 0.85, 0.45)
-## Accent (rim/emission) colour.
-@export var accent_color: Color = Color(0.7, 1.0, 0.8)
-## Trail particle colour.
-@export var trail_color: Color = Color(0.2, 0.85, 0.45)
-## Emission strength multiplier on body material.
-@export_range(0.0, 4.0) var emissive_strength: float = 1.0
-## Optional death-effect override.
-@export var death_effect: DeathEffect = DeathEffect.DEFAULT
-## Coin cost to unlock (0 = free).
-@export var cost_coins: int = 0
+## Base body tint — lerped onto the §6 tier band colours (threat tiers stay
+## readable through any skin).
+@export var body_colour: Color = Color(0.62, 0.94, 1.0)
+@export var emission_colour: Color = Color(0.35, 0.9, 1.0)
+@export var emission_energy: float = 0.55
+@export var head_colour: Color = Color(0.75, 0.98, 1.0)
+## Trail particle colour (boost motes / Phase 10 trail FX read this).
+@export var trail_colour: Color = Color(0.4, 0.95, 1.0)
+## Optional head mesh override ("" = default sphere; Phase 10 may use it).
+@export var head_mesh_override: String = ""
+## Optional death-effect override id ("" = default dissolve; Phase 10).
+@export var death_effect: String = ""
+## Player level that unlocks the RIGHT to purchase (§16 levels unlock skins).
+@export var unlock_level: int = 1
+## Coin price (0 = free with the level unlock).
+@export var price: int = 0

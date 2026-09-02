@@ -47,3 +47,15 @@ echo "[setup_env] Verifying..."
 godot --version
 echo "[setup_env] Done. Headless test:  godot --headless --path . --quit"
 echo "[setup_env] Rendered test:  xvfb-run -a -s '-screen 0 1280x720x24' godot --path . --resolution 1280x720"
+
+# --- git bootstrap (sandbox note: .git/config is NOT persisted across
+# sessions — credential-path exclusion — so the remote + identity must be
+# restored every fresh sandbox; credentials remain human-provided, see
+# docs/ENVIRONMENT.md §4/§5) ---
+cd "$REPO_ROOT" 2>/dev/null || true
+if [ -d .git ]; then
+  git remote get-url origin >/dev/null 2>&1 || git remote add origin https://github.com/MokhethiNyaps/snake-arena.git
+  git config user.name >/dev/null 2>&1 || git config user.name "Arena Agent"
+  git config user.email >/dev/null 2>&1 || git config user.email "agent@arena.local"
+  echo "[git] remote + identity ready (push still needs a human-provided PAT)"
+fi

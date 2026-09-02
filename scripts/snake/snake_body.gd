@@ -28,6 +28,12 @@ var _colours: PackedColorArray = PackedColorArray()
 var _growing: Array[float] = []   # per-slot grow timer (-1 = settled)
 var _shrinking: Array[float] = []  # per-slot shrink timer (-1 = settled)
 var _base_scale: float = 1.0
+## §16 skin tint (WHITE = no skin → default look, e.g. AI snakes).
+## Tier bands stay readable: the band colour is lerped toward the tint,
+## never replaced.
+var _skin_tint: Color = Color(1, 1, 1)
+var _skin_emission: Color = Color(0.35, 0.9, 1.0)
+var _skin_emission_energy: float = 0.4
 
 
 ## Attaches to `owner` (a SnakeController in the tree).
@@ -128,7 +134,10 @@ func tick() -> void:
 		head_mesh.scale = Vector3.ONE * radius * 1.15
 		var mat: StandardMaterial3D = head_mesh.material_override
 		mat.albedo_color = _band_colour(controller.power_tier(), 0, 2)
-		mat.emission = _band_colour(controller.power_tier(), 0, 2)
+		if _skin_tint != Color(1, 1, 1):
+			mat.emission = _skin_emission
+		else:
+			mat.emission = _band_colour(controller.power_tier(), 0, 2)
 
 
 ## §6.2 target-arc formula, shared by the tick and the unit tests.
@@ -221,8 +230,29 @@ func _band_colour(tier: int, index: int, count: int) -> Color:
 		Color(1.0, 0.35, 0.3),
 	]
 	var base: Color = bands[mini(tier, bands.size() - 1)]
+	if _skin_tint != Color(1, 1, 1):
+		base = base.lerp(_skin_tint, 0.65)
 	var ramp: float = 0.85 + 0.15 * (float(index) / float(maxi(1, count - 1)))
 	return Color(base.r * ramp, base.g * ramp, base.b * ramp)
+
+
+## §16 SkinManager entry point: tints the body (tier bands stay visible),
+## recolours emissives. Cosmetic-only by construction — no stats involved.
+func apply_skin(body_colour: Color, emission_colour: Color, emission_energy: float, _head_colour: Color) -> void:
+	_skin_tint = body_colour
+	_skin_emission = emission_colour
+	_skin_emission_energy = emission_energy
+	if mmi != null and mmi.material_override is StandardMaterial3D:
+		var mat: StandardMaterial3D = mmi.material_override as StandardMaterial3D
+		mat.emission = emission_colour
+		mat.emission_energy_multiplier = emission_energy
+	if head_mesh != null and head_mesh.material_override is StandardMaterial3D:
+		head_mesh.material_override.emission_energy_multiplier = emission_energy
+	# Re-tint already-written instances immediately (mid-run skin change).
+	for i in _count:
+		_colours[i] = _band_colour(controller.power_tier(), i, _count)
+	if mmi != null and mmi.multimesh != null:
+		mmi.multimesh.color_array = _colours
 
 
 func _make_segment_mesh() -> SphereMesh:

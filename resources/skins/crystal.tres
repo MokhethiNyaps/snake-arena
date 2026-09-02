@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="SkinDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/config/skin_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "crystal"
+display_name = "Crystal"
+body_colour = Color(0.62, 0.85, 1.00, 1)
+emission_colour = Color(0.55, 0.80, 1.00, 1)
+emission_energy = 0.7
+head_colour = Color(0.80, 0.92, 1.00, 1)
+trail_colour = Color(0.70, 0.85, 1.00, 1)
+head_mesh_override = ""
+death_effect = ""
+unlock_level = 6
+price = 250

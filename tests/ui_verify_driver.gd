@@ -59,6 +59,8 @@ func _shot(name: String) -> void:
 	await RenderingServer.frame_post_draw
 	var img: Image = get_viewport().get_texture().get_image()
 	var dir: String = OS.get_environment("CC_UI_SHOTS")
+	if dir != "":
+		DirAccess.make_dir_recursive_absolute(dir)
 	if dir == "":
 		dir = "/tmp"
 	img.save_png("%s/ui_%s.png" % [dir, name])
@@ -298,14 +300,18 @@ func _stage_full_loop() -> void:
 	await _click(revive)
 	if not await _wait_state(GameManager.State.PLAYING, "PLAYING after revive"):
 		return
+	# Revive contract (#56): restores at max(start_power, 65% of death
+	# power) — a FLOOR, not an exact value: the revived snake can already be
+	# eating cells by the time we sample (it spawns on collectibles).
 	var revived_power: float = _director._snake.power
-	if absf(revived_power - death_power * 0.65) > maxf(1.0, death_power * 0.1):
-		_fail("revive power %.1f != ~65%% of %.1f" % [revived_power, death_power])
+	var floor_power: float = maxf(_director._snake.config.start_power, death_power * 0.65)
+	if revived_power < floor_power - 0.01:
+		_fail("revive power %.1f below floor %.1f (65%% of %.1f)" % [revived_power, floor_power, death_power])
 		return
 	if not _director._snake.alive:
 		_fail("revived snake not alive")
 		return
-	print("CC_UI_REVIVE ok power=%.1f (65%% of %.1f)" % [revived_power, death_power])
+	print("CC_UI_REVIVE ok power=%.1f (floor %.1f = max(start, 65%% of %.1f))" % [revived_power, floor_power, death_power])
 	await _shot("05_revived")
 	# S7 — die again: REVIVE must now be hidden (max 1 per run).
 	_kill_player()

@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="SkinDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/config/skin_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "classic"
+display_name = "Classic"
+body_colour = Color(0.62, 0.94, 1.00, 1)
+emission_colour = Color(0.35, 0.90, 1.00, 1)
+emission_energy = 0.55
+head_colour = Color(0.75, 0.98, 1.00, 1)
+trail_colour = Color(0.40, 0.95, 1.00, 1)
+head_mesh_override = ""
+death_effect = ""
+unlock_level = 1
+price = 0
