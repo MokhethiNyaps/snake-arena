@@ -40,6 +40,8 @@ var _hash: SpatialHash = SpatialHash.new()
 var _alive: Dictionary = {}  # instance_id -> CollectibleNode
 var _refill_accumulator: float = 0.0
 var _t: float = 0.0
+var _spin_angle: float = 0.0
+var _renderer: CollectibleRenderer = null
 
 # Per-instance VFX timers (parallel arrays, only active entries iterated).
 var _burst_nodes: Array[Node] = []
@@ -53,6 +55,9 @@ var _label_timers: Array[float] = []
 
 func _ready() -> void:
 	ObjectPoolRegistry.register_pool(POOL_COLLECTIBLE, COLLECTIBLE_SCENE, PREWARM_COLLECTIBLES)
+	_renderer = CollectibleRenderer.new()
+	_renderer.name = "CollectibleRenderer"
+	add_child(_renderer)
 	ObjectPoolRegistry.register_pool(POOL_BURST, BURST_SCENE, PREWARM_BURSTS)
 	ObjectPoolRegistry.register_pool(POOL_LABEL, LABEL_SCENE, PREWARM_LABELS)
 
@@ -146,16 +151,12 @@ func tick(delta: float) -> void:
 	_tick_vfx(delta)
 
 
+## §19 (decision #71): rendering is centralized in the per-shape MultiMesh
+## renderer; pulse lives in the shader, spin is one shared accumulated angle
+## (per-instance offset derives from position).
 func _tick_visuals(delta: float) -> void:
-	for id in _alive:
-		var node: CollectibleNode = _alive[id] as CollectibleNode
-		if node == null or not node.visible:
-			continue
-		if node.def.type == CollectibleDef.Type.SHARD_RARE:
-			node.spin(delta * 1.6)
-			node.pulse(_t * 5.0, 1.0)
-		else:
-			node.pulse(_t * 3.0, 0.4)
+	_spin_angle += delta * 1.6
+	_renderer.sync(_alive, _spin_angle)
 
 
 func _tick_decay(delta: float) -> void:

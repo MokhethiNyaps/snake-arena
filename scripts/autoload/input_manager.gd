@@ -72,6 +72,10 @@ func _physics_process(_delta: float) -> void:
 ## GUI layer consumes motion for hover), while _input receives everything.
 ## We never mark events handled, so GUI buttons still work normally.
 func _input(event: InputEvent) -> void:
+	# §15 autoplay policy: the first real input is the user gesture that
+	# permits audio. Cheap one-flag check, fires once.
+	if not AudioManager.is_unlocked():
+		AudioManager.unlock()
 	# Touch-synthesized mouse events (emulate_mouse_from_touch, needed so
 	# touchscreen taps drive GUI buttons) must NOT flip the scheme back to
 	# MOUSE — the originating ScreenTouch already set TOUCH.

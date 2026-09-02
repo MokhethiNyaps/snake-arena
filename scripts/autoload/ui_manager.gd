@@ -21,6 +21,14 @@ func _ready() -> void:
 	_ui_root.layer = UI_LAYER
 	add_child(_ui_root)
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	# §15: one global click sound for EVERY button, wired at creation — no
+	# per-screen audio code. A press IS the §15 user gesture (autounlock).
+	get_tree().node_added.connect(_on_node_added)
+
+
+func _on_node_added(node: Node) -> void:
+	if node is Button:
+		(node as Button).pressed.connect(func() -> void: AudioManager.play_ui(&"ui_click"))
 
 
 ## Pushes a screen on top. Returns the instantiated Control.

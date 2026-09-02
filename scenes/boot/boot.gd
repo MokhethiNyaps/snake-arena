@@ -112,6 +112,12 @@ func _build_world() -> void:
 	# controller never sees them (test-enforced invariant).
 	if _skins != null:
 		_skins.apply_equipped_to(_snake.body)
+	# Phase 10 boost trail, coloured by the equipped skin (§16 trail colour).
+	var trail: BoostTrail = BoostTrail.new()
+	trail.name = "BoostTrail"
+	_snake.add_child(trail)
+	trail.setup(_skins.trail_colour())
+	_snake.boosted_changed.connect(trail.set_boosting)
 	var rig: CameraRig = _player.get_node("CameraRig")
 	rig.set_target(_snake)
 	if _arena.has_method("setup_world"):
@@ -234,6 +240,7 @@ func do_revive(power: float) -> void:
 	if _snake == null or _arena == null:
 		return
 	_revives_used_this_run += 1
+	AudioManager.play_sfx(&"revive")
 	var pos: Vector3 = _safe_revive_position()
 	_snake.revive_at(pos, power)
 	if _arena.combat_manager != null:
@@ -307,6 +314,34 @@ func grant_double_coins() -> void:
 	Analytics.track(&"coins_earned", {"amount": _coins_earned_this_run, "doubled": true})
 
 
+## Phase 10 verification: fly to the boundary wall, frame it, screenshot.
+func _boundary_shot() -> void:
+	await _wait_for_playinging()
+	await get_tree().create_timer(2.0).timeout
+	var cam: Camera3D = get_viewport().get_camera_3d()
+	if cam == null or _snake == null:
+		print("CC_BOUND_FAIL no camera")
+		get_tree().quit(1)
+		return
+	var head: Vector3 = _snake.global_position
+	var outward: Vector3 = head.normalized() if head.length() > 1.0 else Vector3(1, 0, 0)
+	cam.global_position = head + outward * 6.0 + Vector3(0, 7.0, 0.0)
+	cam.look_at(head + outward * 40.0, Vector3.UP)
+	await get_tree().create_timer(0.5).timeout
+	await RenderingServer.frame_post_draw
+	var img: Image = get_viewport().get_texture().get_image()
+	img.save_png("/tmp/p10/boundary.png")
+	print("CC_BOUND_SHOT saved")
+	get_tree().quit(0)
+
+
+func _wait_for_playinging() -> void:
+	while not GameManager.is_in(GameManager.State.PLAYING):
+		await get_tree().process_frame
+	for i in 20:
+		await get_tree().process_frame
+
+
 # --- settings → live world -----------------------------------------------------
 
 func _apply_saved_audio() -> void:
@@ -362,6 +397,9 @@ func _set_world_active(_active: bool) -> void:
 # --- sandbox verification hooks (env-gated; shipped builds never hit these) ----
 
 func _handle_test_env() -> void:
+	if OS.get_environment("CC_BOUND_SHOT") != "":
+		_boundary_shot()
+		return
 	var smoke: String = OS.get_environment("CC_SMOKE_TEST")
 	var shot: String = OS.get_environment("CC_SCREENSHOT")
 	var run_tests: String = OS.get_environment("CC_RUN_TESTS")

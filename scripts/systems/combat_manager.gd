@@ -187,11 +187,13 @@ func _kill(victim: SnakeController, killer: SnakeController, mutual: bool = fals
 	if killer != null and killer.alive and not mutual:
 		var absorbed: float = victim_power * victim.config.absorbed_power_fraction
 		killer.add_power(absorbed)
-		if killer.is_in_group(PLAYER_GROUP) and score_manager != null:
-			var reward: float = balance.kill_score_base + floor(victim_power * balance.kill_score_power_factor)
-			score_manager.add_score(reward)
-			EventBus.collectible_absorbed.emit(99, reward)
-			Analytics.track(&"absorb", {"victim_power": victim_power, "reward": reward})
+		if killer.is_in_group(PLAYER_GROUP):
+			AudioManager.play_sfx(&"absorb_zap", 1.0, victim.global_position)
+			if score_manager != null:
+				var reward: float = balance.kill_score_base + floor(victim_power * balance.kill_score_power_factor)
+				score_manager.add_score(reward)
+				EventBus.collectible_absorbed.emit(99, reward)
+				Analytics.track(&"absorb", {"victim_power": victim_power, "reward": reward})
 	# Signals + analytics.
 	victim.died.emit(victim)
 	EventBus.snake_died.emit(killer.get_instance_id() if killer != null else -1, victim.get_instance_id())
@@ -269,6 +271,7 @@ func _tick_rim_lights() -> void:
 	var player: SnakeController = _player()
 	if player == null or not player.alive:
 		return
+	var threats: int = 0
 	for s in _live_snakes():
 		if s == player:
 			continue
@@ -277,9 +280,13 @@ func _tick_rim_lights() -> void:
 		# wins ties — the player should always err on the side of caution.
 		if s.power * 10.0 >= player.power * 11.0:
 			tint = Color(0.85, 0.10, 0.10)   # threat: red
+			threats += 1
 		elif player.power * 10.0 >= s.power * 11.0:
 			tint = Color(0.15, 0.85, 0.25)   # prey: green
 		_apply_tint(s, tint)
+	# §15: the high music layer swells with threat pressure (2+ red snakes
+	# = full tension). Same tick cadence as the rim pass (4 physics ticks).
+	AudioManager.set_music_intensity(float(threats) / 2.0)
 
 
 func _apply_tint(s: SnakeController, tint: Color) -> void:

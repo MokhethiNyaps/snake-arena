@@ -46,6 +46,13 @@ in the final report (§49.11).
 | Daily missions: 3/day deterministic, reroll once via rewarded ad, auto-reward | `scripts/systems/mission_manager.gd`, `scripts/ui/missions_screen.gd` | Unit tests (progress semantics, reward payout, reroll gate) | MISSIONS from the menu — complete one, watch coins land; REROLL works once per day |
 | §17 leaderboard architecture: `ILeaderboardBackend` → `LocalLeaderboardBackend` (top-20, date+skin), `LeaderboardManager` swap point | `scripts/systems/i_leaderboard_backend.gd`, `local_leaderboard_backend.gd`, `leaderboard_manager.gd` | Interface tests (order/cap/meta/new-best) | Die with a good score twice — both entries appear in order (high-score UI surfaces in Phase 10 polish) |
 
+### Phase 10 — Feel (2026-09-02)
+| Item | Files | Verified by | Human one-step check |
+|---|---|---|---|
+| §19 draw-call budget ENFORCED: collectibles now render through 5 per-type MultiMeshes; collectibles + snake bodies cast no shadows | `scripts/systems/collectible_renderer.gd`, `scripts/systems/collectible_node.gd`, `scripts/systems/collectible_manager.gd`, `scripts/snake/snake_body.gd` | Harness: **1073 → 91 draw calls max** (budget 150), frame ≤16.7 ms; coloured rendering pixel-verified (probe + in-game) | Run `xvfb-run -a -s "-screen 0 1280x720x24" godot --path . --resolution 1280x720 res://scenes/boot/verify.tscn` — see `draw_calls_max` in the PASS line |
+| §3.5 boundary hex energy-wall shader; §12.2 NEW BEST confetti + fanfare; §16 skin-coloured boost trail | `shaders/boundary_hex.gdshader`, `scenes/arena/arena.tscn`, `scripts/ui/game_over_screen.gd`, `scripts/systems/boost_trail.gd`, `scenes/boot/boot.gd` | Lattice pixel-verified (`CC_BOUND_SHOT=1` run); confetti runs error-free in-harness; trail wired to `boosted_changed` | Play a run: hold boost — glowing trail in your skin's colour; die with a new best — confetti + fanfare; fly to the wall — scrolling hex lattice |
+| §15 audio: 20 procedural SFX wired to events; menu/gameplay music layers w/ threat cross-fade; autoplay unlock; coin/mission/level-up sounds | `audio/sfx/*.wav` (committed), `tools/gen_sfx.gd`, `scripts/autoload/audio_manager.gd`, `scripts/autoload/ui_manager.gd`, `scripts/autoload/input_manager.gd` | All wired + error-free under the dummy driver; sound itself unverifiable in sandbox | **Play with speakers on**: collect (combo pitch rises), kill (zap), wall (thud), death (sting), surge (ping), shrink (alarm), buttons (click); menu pad vs gameplay tension layer; if the music annoys you — settings Music slider (§15 allows shipping silence) |
+
 ---
 
 ## PART B — What the AI CANNOT do at all, and why
@@ -104,6 +111,9 @@ in the final report (§49.11).
 | UI feel (fades, count-up pacing, button sizes) | Functional correctness verified; subjective feel is human judgement (§47) | Low | Play to game-over twice: watch the count-up tween, revive flow, PLAY AGAIN prominence |
 | Economy balance (coin prices, mission rewards, level curve pace) | Math verified; FUN/balance is human judgement — 150 coins for Neon takes ~2 good runs by design | Medium | Play 5 sessions: do missions/coins/skins create a reason to return tomorrow? Tune `resources/config/meta.tres` if not |
 | Skins shop + missions screen usability | Logic verified headless + screens built; visual layout tasted only via llvmpipe screenshots | Medium | Open SKINS/MISSIONS on a phone-sized window (720×1280): tiles readable, buttons thumb-sized |
+| AUDIO/MUSIC TASTE | Every clip is procedural sine-synthesis and the sandbox has no audio device — correctness is wired, QUALITY is untested by ear | HIGH (it's the phase's core) | Play 5 minutes with sound: no ear-fatigue (±8% pitch variation exists), collect combo pitch feels good, music layers cross-fade with threat. If any clip annoys: regenerate (`godot --headless --path . --script res://tools/gen_sfx.gd`) after tweaking its recipe, or ship silence |
+| Snake per-segment TIER BANDING | MultiMesh per-instance colors render WHITE on the sandbox stack (decision #72) — banding may or may not work on real GPUs (rim-light tint + labels DO work) | Medium | On a real GPU: small snakes should show green banded bodies, big ones orange/red. If bodies are uniform-coloured, tell the agent — Phase 12 fix is per-tier materials |
+| Boundary shader + confetti + boost trail on real GPU | Pixel-verified under llvmpipe; GPU rendering may differ (additive blending brightness, particle scaling) | Low | One run: wall lattice visible but not glaring; confetti visible against the panel; trail sized right |
 
 *(This table grows every phase. Everything listed in Part B is also, by definition, unverifiable by me.)*
 

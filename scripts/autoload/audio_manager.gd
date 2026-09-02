@@ -35,10 +35,36 @@ const _SFX_STREAMS: Dictionary = {
 	SFX_COLLECT: preload("res://audio/sfx/collect_pop.wav"),
 	SFX_RARE: preload("res://audio/sfx/collect_rare.wav"),
 	SFX_MOTE: preload("res://audio/sfx/collect_mote.wav"),
+	&"ui_click": preload("res://audio/sfx/ui_click.wav"),
+	&"absorb_zap": preload("res://audio/sfx/absorb_zap.wav"),
+	&"boost_whoosh": preload("res://audio/sfx/boost_whoosh.wav"),
+	&"powerup": preload("res://audio/sfx/powerup.wav"),
+	&"revive": preload("res://audio/sfx/revive.wav"),
+	&"new_best": preload("res://audio/sfx/new_best.wav"),
+	&"level_up": preload("res://audio/sfx/level_up.wav"),
+	&"mission_done": preload("res://audio/sfx/mission_done.wav"),
+	&"coin_tick": preload("res://audio/sfx/coin_tick.wav"),
+	&"wall_thud": preload("res://audio/sfx/wall_thud.wav"),
+	&"surge_ping": preload("res://audio/sfx/surge_ping.wav"),
+	&"shrink_alarm": preload("res://audio/sfx/shrink_alarm.wav"),
+	&"death_sting": preload("res://audio/sfx/death_sting.wav"),
+	&"gameover": preload("res://audio/sfx/gameover.wav"),
 }
+
+## §15 music layers — gentle procedural pads (see tools/gen_sfx.gd).
+const MUSIC_MENU: StringName = &"menu"
+const MUSIC_GAMEPLAY: StringName = &"gameplay"
+const MUSIC_CROSSFADE_S: float = 1.2
+const MUSIC_INTENSITY_SMOOTH: float = 0.5  # seconds per intensity re-step
 
 var _ducked: bool = false
 var _pre_duck_volumes: Dictionary = {}
+## §15 web autoplay: nothing audible until the first user gesture.
+var _unlocked: bool = false
+var _music_players: Dictionary = {}   # layer id -> AudioStreamPlayer
+var _music_current: StringName = &""
+var _music_intensity: float = 0.0
+var _last_coin_sfx: float = -1.0
 
 var _pool_3d: Array[AudioStreamPlayer3D] = []
 var _pool_2d: Array[AudioStreamPlayer] = []
@@ -52,6 +78,8 @@ var _rng: RandomNumberGenerator = RandomNumberGenerator.new()
 func _ready() -> void:
 	_ensure_buses()
 	_build_pools()
+	_build_music()
+	_wire_event_sfx()
 	_rng.randomize()
 
 
@@ -98,9 +126,130 @@ func get_bus_volume_db(bus: StringName) -> float:
 	return AudioServer.get_bus_volume_db(idx) if idx >= 0 else 0.0
 
 
-## Phase 10 stub — menu/gameplay loops with intensity layers.
-func play_music(_id: StringName) -> void:
-	pass
+## Called from ANY first input (InputManager forwards the first event) —
+## §15 web autoplay policy. Until then, play calls silently no-op except
+## UI clicks, which are themselves gestures and unlock on the spot.
+func unlock() -> void:
+	if _unlocked:
+		return
+	_unlocked = true
+	if _music_current != &"":
+		_fade_layer(_music_current, 1.0)
+
+
+func is_unlocked() -> bool:
+	return _unlocked
+
+
+## §15 music: one menu loop; gameplay = low + high layers cross-faded by
+## `set_music_intensity` (nearby threat count drives it).
+func play_music(id: StringName) -> void:
+	if _music_current == id:
+		return
+	_music_current = id
+	if not _unlocked:
+		return  # starts on unlock()
+	match id:
+		MUSIC_MENU:
+			_fade_layer(&"menu", 1.0)
+			_fade_layer(&"game_low", 0.0)
+			_fade_layer(&"game_high", 0.0)
+		MUSIC_GAMEPLAY:
+			_fade_layer(&"menu", 0.0)
+			_apply_intensity()
+		_:
+			_fade_layer(&"menu", 0.0)
+			_fade_layer(&"game_low", 0.0)
+			_fade_layer(&"game_high", 0.0)
+
+
+## 0..1 — how hot the gameplay layer stack runs (threat pressure).
+func set_music_intensity(x: float) -> void:
+	_music_intensity = clampf(x, 0.0, 1.0)
+	if _music_current == MUSIC_GAMEPLAY and _unlocked:
+		_apply_intensity()
+
+
+func _apply_intensity() -> void:
+	# Low layer always up in gameplay; high layer fades in with threat.
+	_fade_layer(&"game_low", 1.0)
+	_fade_layer(&"game_high", _music_intensity)
+
+
+func _fade_layer(layer: StringName, volume: float) -> void:
+	var player: AudioStreamPlayer = _music_players.get(layer)
+	if player == null:
+		return
+	var target_db: float = linear_to_db(clampf(volume, 0.0001, 1.0)) if volume > 0.0 else -80.0
+	var tween: Tween = create_tween()
+	tween.tween_property(player, "volume_db", target_db, MUSIC_CROSSFADE_S)
+
+
+func _build_music() -> void:
+	var layers: Dictionary = {
+		&"menu": preload("res://audio/sfx/music_menu.wav"),
+		&"game_low": preload("res://audio/sfx/music_game_low.wav"),
+		&"game_high": preload("res://audio/sfx/music_game_high.wav"),
+	}
+	for layer in layers:
+		var p: AudioStreamPlayer = AudioStreamPlayer.new()
+		p.name = "Music_" + String(layer)
+		p.bus = BUS_MUSIC
+		p.stream = layers[layer]
+		p.volume_db = -80.0
+		add_child(p)
+		_music_players[layer] = p
+		p.play()
+
+
+## EventBus → SFX wiring (self-contained; systems never call audio directly
+## except positional world sounds).
+func _wire_event_sfx() -> void:
+	EventBus.player_died.connect(func() -> void: play_sfx(&"death_sting", 1.0, Vector3.INF))
+	EventBus.powerup_collected.connect(func(_t: int) -> void: play_sfx(&"powerup"))
+	EventBus.level_up.connect(func(_l: int) -> void: play_sfx(&"level_up"))
+	EventBus.mission_completed.connect(func(_id: StringName) -> void: play_sfx(&"mission_done"))
+	EventBus.surge_incoming.connect(func(_p: Vector3) -> void: play_sfx(&"surge_ping"))
+	EventBus.arena_shrinking.connect(func(_r: float) -> void: play_sfx(&"shrink_alarm"))
+	EventBus.coins_changed.connect(_on_coins_changed)
+	InputManager.boost_pressed.connect(func() -> void: play_sfx(&"boost_whoosh"))
+	EventBus.game_state_changed.connect(_on_music_state)
+
+
+func _on_music_state(_from: int, to: int) -> void:
+	match to:
+		GameManager.State.MENU:
+			play_music(MUSIC_MENU)
+		GameManager.State.PLAYING:
+			play_music(MUSIC_GAMEPLAY)
+		GameManager.State.GAME_OVER:
+			play_music(&"")
+			play_sfx(&"gameover")
+
+
+func _on_coins_changed(_coins: int) -> void:
+	# Rate-limited tick so a big payout does not machine-gun.
+	var now: float = Time.get_ticks_msec() / 1000.0
+	if now - _last_coin_sfx < 0.08:
+		return
+	_last_coin_sfx = now
+	play_sfx(&"coin_tick", 1.0, Vector3.INF)
+
+
+## UI-bus one-shot (buttons etc.). A UI interaction IS a user gesture —
+## it also unlocks audio (§15 autoplay).
+func play_ui(id: StringName) -> void:
+	unlock()
+	var stream: AudioStream = _SFX_STREAMS.get(id)
+	if stream == null or _pool_2d.is_empty():
+		return
+	var p: AudioStreamPlayer = _pool_2d[_next_2d]
+	_next_2d = (_next_2d + 1) % VOICE_LIMIT_2D
+	p.bus = BUS_UI
+	p.stream = stream
+	p.pitch_scale = _varied_pitch()
+	p.volume_db = 0.0
+	p.play()
 
 
 ## §15 voice pools: 24 3D voices for world SFX, 12 2D voices for UI.
@@ -120,6 +269,8 @@ func _build_pools() -> void:
 
 ## Plays `id` as a positional (3D) SFX with optional pitch scale.
 func play_sfx(id: StringName, pitch_scale: float = 1.0, at_pos: Vector3 = Vector3.INF) -> void:
+	if not _unlocked:
+		return  # §15 autoplay: no audio before the first user gesture
 	var stream: AudioStream = _SFX_STREAMS.get(id)
 	if stream == null:
 		return

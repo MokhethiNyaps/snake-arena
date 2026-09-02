@@ -41,6 +41,8 @@ func _ready() -> void:
 	_best_badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_best_badge.visible = bool(stats.get("new_best", false))
 	col.add_child(_best_badge)
+	if bool(stats.get("new_best", false)):
+		_celebrate()
 	# Stats rows (values count up over 0.6 s).
 	for key in [["score", "SCORE"], ["power", "POWER"], ["length", "LENGTH"],
 			["rank", "RANK"], ["time", "TIME"], ["absorbed", "ABSORBED"], ["coins", "COINS"]]:
@@ -81,6 +83,34 @@ func _ready() -> void:
 		"duration_s": stats.get("time_s", 0.0),
 		"absorbs": stats.get("absorbed", 0), "revived": false,
 	})
+
+
+## §12.2 new-best celebration: confetti burst + a distinct sting.
+func _celebrate() -> void:
+	AudioManager.play_sfx(&"new_best", 1.0, Vector3.INF)
+	var confetti: CPUParticles2D = CPUParticles2D.new()
+	confetti.name = "Confetti"
+	confetti.position = Vector2(size.x * 0.5, -40.0)
+	confetti.amount = 140
+	confetti.one_shot = true
+	confetti.lifetime = 1.8
+	confetti.explosiveness = 0.95
+	confetti.direction = Vector2(0, 1)
+	confetti.spread = 60.0
+	confetti.initial_velocity_min = 260.0
+	confetti.initial_velocity_max = 520.0
+	confetti.gravity = Vector2(0, 420)
+	confetti.scale_amount_min = 3.0
+	confetti.scale_amount_max = 6.0
+	confetti.angular_velocity_min = -320.0
+	confetti.angular_velocity_max = 320.0
+	var ramp: Gradient = Gradient.new()
+	for c in [Color(1.0, 0.85, 0.3), Color(0.55, 0.95, 1.0), Color(0.4, 1.0, 0.5),
+			Color(1.0, 0.45, 0.6), Color(0.9, 0.9, 1.0)]:
+		ramp.add_point(float(ramp.get_point_count()) / 5.0, c)
+	confetti.color_ramp = ramp
+	add_child(confetti)
+	confetti.emitting = true
 
 
 func _label(size: int, color: Color) -> Label:

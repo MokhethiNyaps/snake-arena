@@ -74,6 +74,8 @@ var _die_seen: bool = false
 
 var _max_frame_ms: float = 0.0
 var _frame_samples: int = 0
+## §19 draw-call ceiling (150) — sampled from the rendering server.
+var _max_draw_calls: int = 0
 var _frame_acc_ms: float = 0.0
 
 
@@ -119,6 +121,8 @@ func _physics_process(delta: float) -> void:
 	_frame_acc_ms += frame_ms
 	_frame_samples += 1
 	_max_frame_ms = maxf(_max_frame_ms, frame_ms)
+	_max_draw_calls = maxi(_max_draw_calls,
+		RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_DRAW_CALLS_IN_FRAME))
 	# Path-length accumulation (head velocity integrated per frame).
 	if _phase >= 5 and _snake != null:
 		_path_length += _snake.global_position.distance_to(_last_head_pos)
@@ -859,10 +863,20 @@ func _checks_conflict() -> void:
 
 
 func _win() -> void:
-	print("CC_VERIFY_PASS moved=%.1f power=%.1f speed=%.2f segs=%d path_3s=%.1f max_frame_ms=%.1f avg_frame_ms=%.1f" % [
+	# §19 diagnostic: what do collectibles cost in draw calls? (hides the
+	# collectible VISUALS for two frames and samples again)
+	var cm: Node = _arena.collectible_manager
+	for c in cm.get_children():
+		(c as Node3D).visible = false
+	await get_tree().process_frame
+	await get_tree().process_frame
+	print("CC_DC_DIAG without_collectibles=%d (of %d)" % [
+		RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_DRAW_CALLS_IN_FRAME),
+		_max_draw_calls])
+	print("CC_VERIFY_PASS moved=%.1f power=%.1f speed=%.2f segs=%d path_3s=%.1f max_frame_ms=%.1f avg_frame_ms=%.1f draw_calls_max=%d" % [
 		_snake.global_position.distance_to(Vector3.ZERO), _snake.power,
 		_snake.current_speed, _snake.get_segment_count(), _path_length, _max_frame_ms,
-		_frame_acc_ms / maxf(1.0, float(_frame_samples))])
+		_frame_acc_ms / maxf(1.0, float(_frame_samples)), _max_draw_calls])
 	get_tree().quit(0)
 
 

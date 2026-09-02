@@ -53,6 +53,9 @@ func setup(owner: SnakeController) -> void:
 	multimesh.instance_count = cap
 	mmi.multimesh = multimesh
 	mmi.material_override = _make_body_material()
+	# §19: snakes do not cast shadows (top-down arena, dark ground — the
+	# shadow pass over every segment-drawing MultiMesh doubled draw calls).
+	mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	_transforms.resize(cap * 16)
 	_colours.resize(cap)
 	# Initial invisible instances (all at origin until written).
@@ -71,6 +74,7 @@ func setup(owner: SnakeController) -> void:
 	head_sphere.rings = 6
 	head_mesh.mesh = head_sphere
 	head_mesh.material_override = _make_head_material()
+	head_mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	controller.add_child(head_mesh)
 
 

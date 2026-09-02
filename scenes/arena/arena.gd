@@ -97,6 +97,7 @@ func _on_boost_mote(pos: Vector3, power: float) -> void:
 func on_wall_hit(_is_player: bool = true) -> void:
 	if combat_manager.rig != null:
 		combat_manager.rig.add_trauma(combat_manager.balance.wall_hit_trauma)
+	AudioManager.play_sfx(&"wall_thud", 1.0, Vector3.INF)
 	_pulse_vignette()
 
 
