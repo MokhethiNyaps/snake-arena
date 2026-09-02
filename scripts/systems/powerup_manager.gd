@@ -73,7 +73,7 @@ func _spawn_pickup() -> void:
 	var def: PowerUpDef = table.weighted_pick(_rng)
 	var node: Node3D = ObjectPoolRegistry.acquire(POOL_POWERUP)
 	node.set_meta("def", def)
-	arena_owner.add_child(node)
+	node.visible = true
 	node.global_position = pos
 	node.set_meta("active", true)
 	_pickups.append({"node": node, "def": def})
@@ -84,7 +84,7 @@ func spawn_at(pos: Vector3, effect: PowerUpDef.Effect) -> Node3D:
 	var def: PowerUpDef = table.get_def(effect)
 	var node: Node3D = ObjectPoolRegistry.acquire(POOL_POWERUP)
 	node.set_meta("def", def)
-	arena_owner.add_child(node)
+	node.visible = true
 	node.global_position = pos
 	node.set_meta("active", true)
 	_pickups.append({"node": node, "def": def})
