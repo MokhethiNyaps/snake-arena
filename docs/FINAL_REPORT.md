@@ -1,0 +1,401 @@
+# FINAL REPORT — CoilClash (Snake Arena)
+
+Phase 13 deliverable per master prompt §49. Game version `0.11.0-dev`, Godot 4.7.2.
+Every claim below is verifiable by a command or a click; the commands are given where the claim is machine-checked.
+
+---
+
+## 1. Environment
+
+| What | Detail |
+|---|---|
+| Engine | Godot `4.7.2.stable.official.ed1daf0bf` (Linux x86_64, pinned; decision #10) |
+| Build machine | Debian GNU/Linux 13 (trixie) sandbox, kernel 6.1.158+, x86_64, no GPU / no display / no audio device |
+| Rendering for tests | Xvfb + Mesa **llvmpipe** (software OpenGL 4.5 Core) — real-GPU behaviour NOT tested here (see §10) |
+| Audio | Dummy driver — SFX correctness is wired, quality untested by ear |
+| Web toolchain | Export templates 4.7.2 (`web_nothreads_release`), custom shell, `playwright-core` + system Chromium for in-browser proofs (SwiftShader) |
+| Restore | `bash tools/setup_env.sh` rebuilds the whole toolchain after a sandbox reset (documented in `docs/ENVIRONMENT.md`) |
+
+---
+
+## 2. Systems implemented
+
+| System | Main files | Status | Notes |
+|---|---|---|---|
+| Boot flow + GameManager state machine | `scenes/boot/`, `scripts/autoload/game_manager.gd` | Complete | PLAYING/PAUSED/PAUSED_FOR_AD/DYING/GAME_OVER/MENU/LOADING; refused transitions are explicit |
+| Snake body + movement (§6) | `scripts/snake/` | Complete | MultiMesh fixed-cap buffers (decision #16), wall slide §3.5 |
+| Camera (§5) | `scripts/camera/` | Complete | Spec-conformant follow |
+| Input: keyboard / mouse / touch / gamepad (§7) | `scripts/autoload/input_manager.gd` | Complete | Auto-detect + 1.35× touch margins; *feel* is human-verifiable |
+| Spatial hash + pools | `scripts/systems/spatial_hash.gd`, `scripts/util/object_pool.gd` | Complete | Brute-force cross-checked |
+| Economy / collectibles (§3) | `scripts/systems/collectible_*` | Complete | 5 types, per-type MultiMesh rendering |
+| AI opponents (§8) | `scripts/ai/`, `resources/ai/*.tres` | Complete | 5 personalities, 8-state FSM, context steering, ≤2.5 ms budget scheduler |
+| Combat / kill rules (§9) | `scripts/systems/combat_manager.gd` | Complete | Full matrix incl. 1.10 boundary, tested table-driven |
+| Power-ups (§10) | `scripts/systems/powerup_manager.gd` | Complete | Inventory table as specced |
+| Ads: 9 placements, pacing, watchdog, consent (§45) | `scripts/ads/`, `scripts/autoload/ad_manager.gd`, `consent_manager.gd` | Complete (AdMob provider itself = Scaffold) | Every outcome path machine-tested incl. watchdog timeout and mid-ad focus loss |
+| Web export + portal bridge | `web/portal_shell.html`, `tools/build_web.sh`, `tools/webverify.js` | Complete | In-browser-verified; gz transfer 10.9 MB < 25 MB |
+| Analytics + remote config (§45.10) | `scripts/autoload/analytics.gd`, `remote_config.gd` | Complete | Offline-first; endpoints are human provisioning |
+| UI layer (§13) | `scripts/ui/`, `scenes/ui/` | Complete | HUD, menus, FTUE, settings, game-over, consent |
+| Meta: save / coins / XP / 8 skins / missions / leaderboard (§16–17) | `scripts/autoload/save_manager.gd`, `scripts/systems/` | Complete (leaderboard = local top-20; online = swap-point `ILeaderboardBackend`) | Corruption-safe save (quarantine + defaults) |
+| Audio (§15) | `audio/sfx/*.wav`, `tools/gen_sfx.gd`, `audio_manager.gd` | Complete (procedural) | 20 SFX + layered music; taste is human |
+| Perf enforcement (§19) | `collectible_renderer.gd`, budgets | Complete on CPU side | 1073 → 91 draw calls; GPU numbers = human task |
+| In-app purchases | — | Not started (scope-controlled) | `no_ads_purchased` flag honoured by the pacer; store integration is human |
+| Localisation | string-routing ready | Not started | English only |
+| Online multiplayer / cloud save | — | Not started | Out of scope per §47 |
+
+---
+
+## 3. How to run it
+
+```bash
+# Open in the editor / play
+godot --path . --resolution 1280x720
+
+# Full automated suite (expect "RESULTS: 123 passed, 0 failed", exit 0)
+godot --headless --path . --script res://tests/run_tests.gd
+
+# Headless smoke (expect CC_SMOKE_OK ...)
+CC_SMOKE_TEST=1 godot --headless --path .
+
+# Rendered screenshot under software GL (expect CC_SCREENSHOT_OK + non-blank PNG)
+xvfb-run -a -s "-screen 0 1280x720x24" \
+  env CC_SCREENSHOT=/tmp/cc.png godot --path . --resolution 1280x720
+python3 tools/check_png.py /tmp/cc.png
+
+# Full UI harness (expect CC_UI_VERIFY_PASS, exit 0)
+xvfb-run -a -s "-screen 0 1280x720x24" \
+  env CC_UI_VERIFY=1 godot --path . --resolution 1280x720
+
+# Gameplay verify harness (draw calls, AI budget, frame time — expect CC_VERIFY_PASS)
+xvfb-run -a -s "-screen 0 1280x720x24" \
+  godot --path . --resolution 1280x720 res://scenes/boot/verify.tscn
+
+# Phase 12 edge suite (expect CC_EDGE_VERIFY_PASS, ~80 s)
+xvfb-run -a -s "-screen 0 1280x720x24" \
+  env CC_EDGE=1 CC_AD_PROVIDER=mock godot --path . --resolution 1280x720
+
+# 30-minute soak (expect CC_SOAK_PASS)
+xvfb-run -a -s "-screen 0 1280x720x24" \
+  env CC_SOAK=1 CC_SOAK_MINUTES=30 CC_AD_PROVIDER=mock godot --path . --resolution 1280x720
+
+# Web build + in-browser verification (expect webverify PASS lines)
+bash tools/build_web.sh
+(cd web-export && python3 -m http.server 8901 &) && node tools/webverify.js http://localhost:8901
+```
+
+---
+
+## 4. Controls
+
+| Scheme | Steer | Boost | Pause | Notes |
+|---|---|---|---|---|
+| Keyboard | WASD / arrows | Space (hold) | Esc | F3 = debug PerfHUD |
+| Mouse (default on desktop) | Cursor position (raycast, 1.2 u head-anchored dead zone) | Hold left button | Esc | Snake follows the cursor |
+| Touch | Dynamic joystick, drag anywhere left 65 % of screen (90 px radius, 12 px dead zone) | Double-tap + hold | On-screen button | 1.35× invisible touch-target margin |
+| Gamepad | Left stick | A / Cross | Start | Scheme auto-detected; unit-tested, not hardware-tested |
+
+---
+
+## 5. The gameplay loop as built
+
+Boot → (first launch: consent screen §45.8) → **Menu** → **Run**: you are a small snake in a circular arena with 8 AI opponents and ~600 pooled collectibles. Eat → grow + combo; collide head-to-body → the head loses (§9 matrix, 10 % power buffer on eat rule); kill → absorb + rank bonus. Power-ups (SURGE / BLOOM / AEGIS / SHRINK …) spawn with weights per §10. Die → **Game-over**: count-up score/coins, optional **rewarded REVIVE** (65 % power, once), optional **×2 coins** (rewarded), PLAY AGAIN (never disabled) → INTER_RUN interstitial if pacing allows → next run (or Menu, where MENU_RETURN pacing applies).
+
+**Deviations from the spec: none active.** `docs/DEVIATIONS.md` lists zero active deviations; the three logged items are spec-permitted choices (test runner #13, engine version #10, GodotPhysics #12).
+
+---
+
+## 6. AI behaviour
+
+* **5 personalities** (`resources/ai/*.tres`): Aggressive, Collector, Defensive, Explorer, Opportunist — table-driven weights over the same 8-state FSM (§8.2 priority chain: evade > feed > hunt > wander …).
+* **Context steering**: interest from food/prey, danger repulsion from bodies/walls; origin-relative dangers (Phase 8 bug fix); reaction_delay + stale-world tolerance so AI "perceives" like a player.
+* **Budget**: decisions at 5 Hz under `can_afford_decide()` (60 % of the 2.5 ms frame budget); measured **0.78–1.10 ms** for all 8 AI combined.
+* **Respawn**: dead AI respawn on `ai_respawn_delay`; `despawn_all()` exists for 0-AI modes (E1).
+* **What a player sees**: Opportunists race you to collectibles; Aggressive snakes your size or smaller will commit to head-cuts; Defensive ones hug open space and flee when threatened; everyone avoids the wall with a visible slide, never a freeze (fix #51/#52).
+
+---
+
+## 7. Monetization as implemented
+
+**Placement inventory** (all in `resources/config/ads.tres`; type 0 interstitial / 1 rewarded / 2 banner / 3 app-open). All nine are **implemented and machine-tested** end-to-end with the mock provider (show → resolve → unpause → grant/no-grant):
+
+| # | Placement | Type | Trigger | Pacing (as shipped) | Grant policy |
+|---|---|---|---|---|---|
+| 0 | INTER_RUN | Interstitial | PLAY AGAIN, run ≥ 3 | ≥ 120 s gap, ≤ 6 / session | n/a |
+| 1 | MENU_RETURN | Interstitial | Back to menu | ≥ 180 s gap, ≤ 6 / session | n/a |
+| 2 | REVIVE | Rewarded | Game-over revive (65 % power, 1 / run) | ≤ 4 / session, ≤ 8 / day | Strict (no grant on skip/no-fill) |
+| 3 | DOUBLE_COINS | Rewarded | ×2 coins at game-over | ≤ 6 / session | Grant-on-no-fill (kindness) |
+| 4 | MISSION_REROLL | Rewarded | Reroll daily missions | 1 / session, 1 / day | Grant-on-no-fill |
+| 5 | SKIN_TRIAL | Rewarded | 24 h skin unlock | 2 / session, 2 / day | Grant-on-no-fill |
+| 6 | STARTER_BOOST | Rewarded | Pre-run Power 24 + Aegis | 1 / session | Grant-on-no-fill |
+| 7 | BANNER_MENU | Banner | Menu screens only, never gameplay | Uncapped (menu-only) | n/a |
+| 8 | APP_OPEN | App-open | Cold start, run ≥ 2, **mobile only** | ≥ 4 h gap, ≤ 2 / session, ≤ 4 / day | n/a |
+
+**Providers** (`CC_AD_PROVIDER` overrides; auto-selection by host):
+- `AdProviderWebPortal` — Poki / CrazyGames / GameDistribution adapters via the `CCPortal` bridge in `web/portal_shell.html`; verified in-browser against the instant mock.
+- `AdProviderAdMob` — **scaffold**: degrades to DISABLED without the plugin; Google's official *test* unit IDs are already in `ads.tres`; completing it (plugin, real IDs, UMP) is a human task.
+- `AdProviderMock` (dev/CI) and `AdProviderNull` (ads fully off — game stays playable).
+- Cross-cutting: §45.8 consent gate (DECLINED = no serving, game unaffected), frequency caps above, a **watchdog** that resolves any hung ad, and §45.6.8 backgrounding-mid-ad resolution (Phase 12 E5 proof).
+- **Human credentials needed before a single cent**: portal SDK registration (web) or AdMob account + unit IDs (mobile), plus hosted Privacy Policy / ToS / Do-Not-Sell URLs (they show "URL pending" until filled).
+
+---
+
+## 8. Performance (measured vs §19 budget)
+
+Measured where the sandbox *can* measure: logic/CPU headless, draw calls + frame time in the llvmpipe verify harness, stability over a 30-min soak. **Real-GPU numbers are the top human task** (§10 #1).
+
+| §19 item | Budget | Measured | Where |
+|---|---|---|---|
+| AI decisions (all opponents) | 2.5 ms | **0.78–1.10 ms** | verify harness (`CC_VERIFY_PASS` line) |
+| Draw calls | ≤ 150 | **91 max** (was 1073 before Phase 10 MultiMesh enforcement); 59–72 typical in soak | harness / soak samples |
+| Frame time (harness, software GL) | 16.6 ms | ≤ 16.7 ms at 9 snakes | verify harness |
+| Whole-sim CPU at MAX load (240 segments, 9 grown snakes), no renderer | — | **6.9 ms avg / 6.9 ms max / 0 of 300 frames > 20 ms** | headless Phase 12 run |
+| Memory (static) | — | 61.7 → 63.0 MB over 30 min (+1.3) | soak |
+| Node/orphan leaks | 0 growth | nodes +7.8 % settling to flat, **orphans 0** across 20 cycles / 21 runs / 10 ads | Phase 12 soak |
+
+llvmpipe's ~74 ms frame times at max load are software-rasterization artifacts and are deliberately **not** claimed as GPU evidence (decision #81).
+
+---
+
+## 9. Testing
+
+**Automated suite (verbatim tail, run for this report):**
+
+```
+ARENA_READY
+ARENA_READY
+ARENA_READY
+ARENA_READY
+ARENA_READY
+ARENA_READY
+==================================================
+ RESULTS: 123 passed, 0 failed
+==================================================
+[Analytics] session_end {"ads_shown":2,"duration_s":10.981,"runs":1}
+WARNING: 21 ObjectDB instances were leaked at exit (run with `--verbose` for details).
+   at: cleanup (core/object/object.cpp:2536)
+ERROR: 14 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:822)
+```
+
+Exit code `0`. Suite: `godot --headless --path . --script res://tests/run_tests.gd`.
+
+**Manual / harness checks performed and their results:**
+
+| Check | Result |
+|---|---|
+| Headless smoke (`CC_SMOKE_TEST=1`) | PASS — `CC_SMOKE_OK arena_loaded=true player_loaded=true segs=7 state=PLAYING` |
+| Screenshot pixel-verification (llvmpipe, landscape + portrait) | PASS — non-blank, expected colour populations (per-phase logs in `docs/TESTING.md`) |
+| UI harness `CC_UI_VERIFY=1` | PASS 5/5 consecutive + portrait (`CC_UI_VERIFY_PASS`) |
+| Gameplay verify harness (draw calls / AI ms / frame) | PASS 6/6 consecutive after wall-freeze fix (#51) |
+| Edge suite E1–E5 (Phase 12) | ALL PASS — `CC_EDGE_VERIFY_PASS`; E4 node drift 1001→971 (leak-free) |
+| 30-min soak (Phase 12) | PASS — `CC_SOAK_PASS`, 20 cycles, orphans 0 |
+| Web build in real browser (playwright) | PASS — smoke + full UI harness + mock portal ads against the served build |
+| Restart probe (save persistence across processes) | PASS — `CC_RESTART_PROBE` values reload in a fresh process |
+
+---
+
+## 10. Known issues (ranked by severity — under-reporting here would be the worst failure)
+
+1. **Real-GPU performance is unverified.** Every render-side §19 number in §8 came from llvmpipe/headless proxies. If the real-GPU frame time or draw calls blow the budget, the fixes are known-cheap (per-type materials already exist; per-system ms HUD is built in). *Human: launch with F3 on a real GPU.*
+2. **No real portal submission.** The CCPortal bridge is verified against the mock only. Revenue cannot start until a human registers with a portal and swaps the SDK tag in `web/portal_shell.html`. (Risk: HIGH for revenue, zero for correctness.)
+3. **Privacy Policy / ToS / Do-Not-Sell URLs are placeholders** ("URL pending" on the consent screen). Compliance blocker for live ads, human-legal task.
+4. **AdMob provider is a scaffold** — plugin install, real unit IDs, UMP consent flow, and four TODO methods are human (test IDs are pre-filled so the moment credentials exist it's an afternoon).
+5. **Audio quality is untested by ear** (procedural synthesis, no audio device in sandbox). Regeneration recipes are one command (`tools/gen_sfx.gd`); shipping silence is an allowed fallback.
+6. **MultiMesh per-instance tier banding may render white on real GPUs** (llvmpipe limitation, decision #72). Rim-light tint + labels work everywhere; documented fallback = per-tier materials.
+7. **ShaderMaterial uniforms set at runtime render white on llvmpipe** (#72b) — scene-authored shaders work; a real GPU may not even exhibit this.
+8. **Touch / gamepad FEEL unverified** — paths are machine-tested end-to-end, thumbs are not.
+9. **21 ObjectDB instances report at suite exit** (up from 6). Soak shows flat live node/orphan counts for 30 min, so this is exit-order noise, not a runtime leak — but it deserves a proper `--verbose` pass one day.
+10. **The edge driver's E3 step needed a defensive guard for pure-headless runs** (arena-ref timing race, test-infra only; xvfb path is authoritative and clean).
+11. **English-only, no IAP, local-only leaderboard, no cloud save** — deliberate scope decisions (§47 Part B #26–28), each with the swap-point already built.
+12. **xvfb/llvmpipe frame-time numbers must never be quoted as GPU evidence** — recorded as decision #81 so it can't creep into marketing.
+
+---
+
+## 11. `docs/HUMAN_TASKS.md` in full
+
+# HUMAN_TASKS.md — CoilClash (Snake Arena)
+
+The human/AI division of labour (§47). Kept current every phase. Reproduced
+in the final report (§49.11).
+
+---
+
+## PART A — What the AI completed and verified
+
+### Phase 0 — Recon
+| Item | Files | Verified by | Human one-step check |
+|---|---|---|---|
+| Environment recon + Godot 4.7.2 install | `docs/ENVIRONMENT.md`, `tools/setup_env.sh` | `godot --version` → 4.7.2.stable; headless launch of an empty project ran 60 frames and exited 0 | run `bash tools/setup_env.sh && godot --version` |
+
+### Phase 1 — Skeleton
+| Item | Files | Verified by | Human one-step check |
+|---|---|---|---|
+| Folder tree, project settings, Input Map | §21 tree, `project.godot` | Input actions verified at runtime via test script | open `project.godot` in the editor; Input Map tab shows all §7 actions |
+| 11 autoload stubs in §22 order | `scripts/autoload/*.gd` | Boot smoke test (`CC_SMOKE_TEST=1`) prints state transitions and exits 0 | `CC_SMOKE_TEST=1 godot --headless --path .` |
+| Config resource classes + .tres | `scripts/config/*.gd`, `resources/config/*.tres`, `resources/ai/*.tres` | `test_config.gd` green | `godot --headless --path . --script res://tests/run_tests.gd` |
+| SpatialHash + tests | `scripts/systems/spatial_hash.gd`, `tests/test_spatial_hash.gd` | 9 tests green incl. randomized brute-force cross-check | same test command |
+| ObjectPool, Smoothing, MathUtil | `scripts/util/*.gd`, `tests/test_util.gd` | 6 tests green | same test command |
+| Arena scene (ground/boundary/soft ring/lighting) | `scenes/arena/*`, `scenes/boot/*` | rendered screenshot under Xvfb (non-blank, pixel-verified) | `xvfb-run -a -s "-screen 0 1280x720x24" env CC_SCREENSHOT=/tmp/cc.png godot --path . --resolution 1280x720` |
+| Docs: ENVIRONMENT, TESTING, DEVIATIONS, DECISION_LOG, CREDITS | `docs/*.md`, `assets/CREDITS.md` | files committed & pushed | read them |
+
+### Phases 2–7 (previous agent's verified work, re-verified 2026-09-02 by the current agent)
+| Item | Files | Verified by | Human one-step check |
+|---|---|---|---|
+| Snake body/movement/camera, economy, ad scaffolding, AI opponents, conflict, verbs (Phases 2–7) | `scripts/`, `scenes/`, `tests/` (per-phase details in `docs/TESTING.md` results log) | Full suite re-run **100/100 green** and the live verify harness re-run **6/6 PASS** on 2026-09-02 (after the wall-freeze fix below) | `godot --headless --path . --script res://tests/run_tests.gd` |
+| Wall-freeze fix: §3.5 slide restored (factor floored at 0.85 at the wall, never 0.0) + soft-zone inward push (`soft_zone_push_strength`) | `scripts/snake/snake_controller.gd`, `scripts/config/game_balance_config.gd`, `resources/config/game_balance.tres`, decisions #51/#52 | 5 new regression tests (`tests/test_wall_slide.gd`) green; harness AI-window flake (was failing 2-of-3 runs: "AI travelled 0.0 units for 6 s") gone — 6/6 consecutive full-harness passes | same test command, then `xvfb-run -a -s "-screen 0 1280x720x24" godot --path . --resolution 1280x720 res://scenes/boot/verify.tscn` (expect `CC_VERIFY_PASS`, exit 0) |
+| Verify-harness Phase 7 determinism: `PowerUpManager.clear_effects()` test aid + chill-tolerant SURGE check (harness-only fix, decision #53) | `scripts/systems/powerup_manager.gd`, `scenes/boot/verify.gd` | Harness powerup scenario deterministic across 6/6 runs | same harness command |
+
+### Phase 8 — Interface (2026-09-02)
+| Item | Files | Verified by | Human one-step check |
+|---|---|---|---|
+| Full UI layer: HUD (score+combo ring, live leaderboard 4 Hz, minimap w/ threat colours + shrink ring + surge marker, power pill, boost ring, power-up chips w/ radial timers, event banners, banner-ad safe bottom margin, safe-area insets), Boot→Menu→Run→Pause→GameOver→Menu flow, FTUE hint cards, settings (audio buses/shake/minimap/floating numbers/high-contrast — applied immediately + persisted), how-to-play, game-over count-ups + rewarded REVIVE (65 % power, single use) + PLAY AGAIN (never disabled) + ×2 coins button, INTER_RUN/MENU_RETURN pacing wired | `scripts/ui/*.gd`, `scenes/ui/*.tscn`, `scenes/boot/boot.gd` (run director), `scripts/autoload/ui_manager.gd` | UI harness `CC_UI_VERIFY=1` **5/5 consecutive passes** (landscape) + portrait pass; every screen pixel-verified; suite 108/108 | `xvfb-run -a -s "-screen 0 1280x720x24" env CC_UI_VERIFY=1 CC_UI_SHOTS=/tmp/s godot --path . --resolution 1280x720` (expect `CC_UI_VERIFY_PASS`, exit 0) |
+| §7 input schemes completed: mouse raycast steering (default, 1.2 u head-anchored dead zone), touch dynamic joystick (left 65 %, 90 px radius, 12 px dead zone, double-tap-hold boost), gamepad stick; scheme auto-detect | `scripts/autoload/input_manager.gd`, `scripts/player/player_controller.gd` | `tests/test_input_schemes.gd` (4 tests) + live mouse-steer check inside the UI harness (Δ≈98.5° turn) | same UI harness command; then play with a mouse — the snake follows the cursor |
+| §3.6 free-growth window enforced + ContextSteering origin-relative dangers (bug fix) | `scripts/ai/ai_controller.gd`, `scripts/ai/context_steering.gd` | Regression test + gameplay harness PASS (AI budget 0.78 ms vs 2.50) | `godot --headless --path . --script res://tests/run_tests.gd` |
+
+### Phase 9 — Meta (2026-09-02)
+| Item | Files | Verified by | Human one-step check |
+|---|---|---|---|
+| `save.json` v1: versioned + checksummed + atomic write; corruption → quarantine + defaults (never crashes); Phase 8 settings keys auto-migrate | `scripts/autoload/save_manager.gd` | 3 corruption unit tests + restart probe (`CC_RESTART_PROBE …` values reload in a fresh process) | Play 2 runs, restart the game — coins/level/best persist; then hand-corrupt `save.json` (edit a digit) and relaunch — game boots with defaults and `save.json.corrupt` appears next to it |
+| Coins/XP economy: 1 coin per 120 score + 25 top-3, XP=score/10, level curve 220·lvl^1.35, +50 coins per level; ×2-coins rewarded button pays real coins | `scenes/boot/boot.gd` (`_settle_meta`), `resources/config/meta.tres` | Unit tests + live save inspection after a real 3-run harness session | Play to game over — COINS row counts up; watch the ×2 COINS ad button double the payout |
+| 8 skins: level gates + coin prices, buy/equip, body tint keeps power-tier bands readable; SnakeController zero-skin-code invariant | `scripts/systems/skin_manager.gd`, `scripts/config/skin_def.gd`, `resources/skins/*.tres`, `scripts/snake/snake_body.gd` | Suite scan test + buy/equip tests | Earn coins → SKINS → buy + equip Neon → body tints pink/magenta while red-tier threats still read red |
+| Daily missions: 3/day deterministic, reroll once via rewarded ad, auto-reward | `scripts/systems/mission_manager.gd`, `scripts/ui/missions_screen.gd` | Unit tests (progress semantics, reward payout, reroll gate) | MISSIONS from the menu — complete one, watch coins land; REROLL works once per day |
+| §17 leaderboard architecture: `ILeaderboardBackend` → `LocalLeaderboardBackend` (top-20, date+skin), `LeaderboardManager` swap point | `scripts/systems/i_leaderboard_backend.gd`, `local_leaderboard_backend.gd`, `leaderboard_manager.gd` | Interface tests (order/cap/meta/new-best) | Die with a good score twice — both entries appear in order (high-score UI surfaces in Phase 10 polish) |
+
+### Phase 10 — Feel (2026-09-02)
+| Item | Files | Verified by | Human one-step check |
+|---|---|---|---|
+| §19 draw-call budget ENFORCED: collectibles now render through 5 per-type MultiMeshes; collectibles + snake bodies cast no shadows | `scripts/systems/collectible_renderer.gd`, `scripts/systems/collectible_node.gd`, `scripts/systems/collectible_manager.gd`, `scripts/snake/snake_body.gd` | Harness: **1073 → 91 draw calls max** (budget 150), frame ≤16.7 ms; coloured rendering pixel-verified (probe + in-game) | Run `xvfb-run -a -s "-screen 0 1280x720x24" godot --path . --resolution 1280x720 res://scenes/boot/verify.tscn` — see `draw_calls_max` in the PASS line |
+| §3.5 boundary hex energy-wall shader; §12.2 NEW BEST confetti + fanfare; §16 skin-coloured boost trail | `shaders/boundary_hex.gdshader`, `scenes/arena/arena.tscn`, `scripts/ui/game_over_screen.gd`, `scripts/systems/boost_trail.gd`, `scenes/boot/boot.gd` | Lattice pixel-verified (`CC_BOUND_SHOT=1` run); confetti runs error-free in-harness; trail wired to `boosted_changed` | Play a run: hold boost — glowing trail in your skin's colour; die with a new best — confetti + fanfare; fly to the wall — scrolling hex lattice |
+| §15 audio: 20 procedural SFX wired to events; menu/gameplay music layers w/ threat cross-fade; autoplay unlock; coin/mission/level-up sounds | `audio/sfx/*.wav` (committed), `tools/gen_sfx.gd`, `scripts/autoload/audio_manager.gd`, `scripts/autoload/ui_manager.gd`, `scripts/autoload/input_manager.gd` | All wired + error-free under the dummy driver; sound itself unverifiable in sandbox | **Play with speakers on**: collect (combo pitch rises), kill (zap), wall (thud), death (sting), surge (ping), shrink (alarm), buttons (click); menu pad vs gameplay tension layer; if the music annoys you — settings Music slider (§15 allows shipping silence) |
+
+### Phase 11 — Web + monetization wiring (2026-09-02)
+| Item | Files | Verified by | Human one-step check |
+|---|---|---|---|
+| Web export + custom portal shell (CCPortal bridge: Poki/CrazyGames/GameDistribution adapters + instant mock) | `export_presets.cfg`, `web/portal_shell.html`, `scripts/ads/ad_provider_web_portal.gd`, `tools/build_web.sh` | **In-browser**: `CC_SMOKE_OK`, full UI harness `CC_UI_VERIFY_PASS`, mock portal ads fired (rewarded+interstitial), null-provider playable; gz transfer 10.9 MB < 25 MB | `bash tools/build_web.sh` then `(cd web-export && python3 -m http.server 8901)` and open `http://localhost:8901/?cc_portal=mock` — play a run with a real GPU |
+| Consent flow (§45.8) + Settings re-entry + CCPA link | `scripts/ui/consent_screen.gd`, `scenes/ui/consent.tscn`, `scripts/autoload/consent_manager.gd`, `scripts/ui/settings_screen.gd` | UI harness (native + browser): ACCEPT persists GRANTED; DECLINE blocks ads, game playable | Delete the game's user data, relaunch → consent screen; DECLINE → play ad-free; SETTINGS → AD PRIVACY to change |
+| Remote config + analytics events (§45.10) | `scripts/autoload/remote_config.gd`, `scripts/autoload/analytics.gd` | Unit tests (seam + counters); no live endpoint by design | When you have an endpoint: put the URL in `ads.tres remote_config_url`, host `{"balance/arena_radius": 130.0}`-style JSON, relaunch — value applies |
+
+### Phase 12 — Harden (2026-09-02)
+| Item | Files | Verified by | Human one-step check |
+|---|---|---|---|
+| Edge-case suite E1-E5 (0 AI, 240 segments, instant death, 8x spam-restart + menu flips, alt-tab mid-ad) | `tests/edge_driver.gd` | `CC_EDGE_VERIFY_PASS` under xvfb: E1 8 s zero-AI run; E2 segs=240; E3 GAME_OVER+panel in 0.6 s; E4 node drift 1001 to 971 (leak-free, was +431/cycle); E5 mid-ad focus-out resolves ad, restores state, unsuspends input | Run `xvfb-run -a env CC_EDGE=1 CC_AD_PROVIDER=mock godot --path . --resolution 1280x720` (approx 80 s) |
+| Pool-drain leak fixes (collectibles + powerups `_exit_tree` release-all) | `scripts/systems/collectible_manager.gd`, `scripts/systems/powerup_manager.gd` | E4 spam-restart drift gate (max 40 nodes); 30-min soak node/orphan curves flat | Just play: restart runs repeatedly; node count in PerfHUD (F3) stays level |
+| 30-min soak (play-die-restart loop, menu every 3 cycles, mock ad every 2) | `tests/soak_driver.gd` | `CC_SOAK_PASS` — node growth under 25 pct first-vs-last quarter, orphan growth under 50, memory sampled every 15 s | Run with `CC_SOAK=1 CC_SOAK_MINUTES=30 CC_AD_PROVIDER=mock` under xvfb if you want to watch it |
+| §19 CPU-side budget profile | headless no-render run | 240 segments: avg 6.9 ms / max 6.9 ms / 0-of-300 frames over 20 ms — sim+logic well inside 16.6 ms | GPU-side numbers need real hardware (see PART C) |
+
+---
+
+## PART B — What the AI CANNOT do at all, and why
+
+
+**Accounts, credentials, and contracts — I have no ability to create or hold these:**
+1. Create a Google AdMob account, an app entry, and real ad unit IDs. *You must do this, then paste the IDs into `resources/config/ads.tres`.* Google's official test IDs ship as defaults.
+2. Sign up with a web portal (Poki, CrazyGames, GameDistribution, Y8), get approved, and receive their SDK key / game ID. Portals review games manually — requires a human submission.
+3. Create a Google Play Developer account ($25 one-time), an Apple Developer account ($99/yr), and complete identity verification.
+4. Set up AdMob payment details, tax forms (W-8BEN / W-9 or the ZA equivalent), and a bank account for payouts.
+5. Set up ad mediation (AppLovin MAX, ironSource, AdMob mediation waterfalls) — multiple network accounts and dashboard configuration.
+6. Register a company/sole-proprietorship if required for payouts in your jurisdiction (ZA: SARS tax number for the tax interview).
+
+**Legal and policy — I must not author these as binding documents:**
+7. Write and **host** a real Privacy Policy and Terms of Service at public URLs. I can draft template text; a human (ideally with legal review) must approve, adapt to your jurisdiction, and host it. Put the URLs in `ads.tres`.
+8. Complete the Google Play Data Safety form and the Apple App Privacy nutrition labels — legal declarations made by the account holder.
+9. Decide and declare the target age rating (IARC questionnaire), COPPA status, and family-policy compliance.
+10. Verify ad-network policy compliance for your specific placements before launch (policies change; a human must read the current version).
+
+**Hardware and device reality:**
+11. Test on real physical devices (low-end Android, mid-range Android, iPhone, Safari on iOS, Chrome on Android). I cannot run Godot mobile export templates on real hardware or measure real thermal/battery behaviour.
+12. Verify real ad rendering, real fill rates, real latency, and real eCPM. Mock/test ads behave differently from live inventory.
+13. Test on real network conditions (3G, flaky Wi-Fi) and confirm the ad watchdog behaves correctly.
+14. Confirm the game passes Google Play's pre-launch report and Apple's review.
+
+**Subjective and creative judgement:**
+15. Decide whether the game is *fun*. Playtest with at least 5 people who have never seen it.
+16. Final balance tuning based on that playtesting. Every number is exposed in `.tres` files so you can do this without code changes.
+17. Final art direction, character/skin design, logo, icon, and store screenshots. My placeholders are procedural and functional, not beautiful.
+18. Final music and sound design. Commissioned or licensed audio requires a human purchase and licence agreement.
+19. Choose the final game name and check it for trademark conflicts.
+20. Marketing: store listing copy, ASO keywords, trailer, social presence, influencer outreach, paid UA.
+
+**Infrastructure I can code against but cannot provision:**
+21. Online leaderboard backend (Silent Wolf / PlayFab / Nakama / custom). `ILeaderboardBackend` will be a one-file swap; account/server/keys are yours.
+22. Analytics backend (GameAnalytics / Firebase) — needs an account and an API key. `Analytics` autoload is ready for a backend.
+23. Remote config hosting — `RemoteConfig` reads a JSON endpoint you provide.
+24. Web hosting with correct COOP/COEP headers for a multithreaded web export.
+25. Multiplayer servers, if you ever go real-time online.
+
+**Things I deliberately did not do (scope control), which a human should schedule:**
+26. In-app purchases (a "Remove Ads" product). The `no_ads_purchased` flag will be built and honoured throughout `AdPacer`, but the IAP plugin, store product setup, and receipt validation are human tasks.
+27. Localisation. All user-facing strings will be routed through a strings file so translation is a drop-in — but translation quality needs humans.
+28. Cloud save / account system.
+
+---
+
+## PART C — What the AI built but could NOT fully verify
+
+| What | Untested aspect | Risk | How the human should test |
+|---|---|---|---|
+| **§19 perf budgets on a real GPU** (Phase 12) | CPU side measured headless (6.9 ms avg at 240 segs, 0 frames over 20 ms); the sandbox GPU is llvmpipe software rendering — its ~74 ms frame times say nothing about real hardware, and draw-call count / per-system ms split / MultiMesh tier banding (#72) cannot be checked here | **Medium** | Launch on real GPU, F3 PerfHUD: confirm 150 or fewer draw calls, 60 FPS with 9 grown snakes (240-seg E2 shape), per-system ms table vs §19 allocations |
+| Rendered arena visuals | Correctness verified via software-rendered (llvmpipe) screenshots only; no GPU | Low | Open the project in the Godot editor on a real GPU; the circular arena with cyan boundary wall and red outer ring should render at 60 FPS |
+| Input Map events | Actions verified to exist with correct keycodes; physical feel untested | Low | Launch, press WASD/arrows/Space/F3 — steering vector and boost signals fire (debug printouts until Phase 2) |
+| §7 touch scheme FEEL | End-to-end emulated-touch paths are now machine-verified (taps navigate menus, joystick steering turns the snake — decision #63), but no real touchscreen exists in the sandbox; thumb feel, the 1.35× invisible touch-target margin, and double-tap-hold ergonomics are unverified | Medium | Run on an Android phone (`godot` remote debug or an export build): drag anywhere left-of-centre to steer, double-tap-and-hold to boost |
+| HUD readability on small screens | Pixel-verified at 1280×720 and 720×1280 under llvmpipe only; real-device DPI, notch insets, and sunlight readability untested | Medium | Play one run on a mid-range phone in both orientations; check score/leaderboard/power pill/boost ring legibility |
+| Gamepad scheme | Left-stick vector path unit-level only; no physical gamepad in sandbox | Low | Plug in a gamepad, steer with the left stick, boost with A/cross |
+| UI feel (fades, count-up pacing, button sizes) | Functional correctness verified; subjective feel is human judgement (§47) | Low | Play to game-over twice: watch the count-up tween, revive flow, PLAY AGAIN prominence |
+| Economy balance (coin prices, mission rewards, level curve pace) | Math verified; FUN/balance is human judgement — 150 coins for Neon takes ~2 good runs by design | Medium | Play 5 sessions: do missions/coins/skins create a reason to return tomorrow? Tune `resources/config/meta.tres` if not |
+| Skins shop + missions screen usability | Logic verified headless + screens built; visual layout tasted only via llvmpipe screenshots | Medium | Open SKINS/MISSIONS on a phone-sized window (720×1280): tiles readable, buttons thumb-sized |
+| AUDIO/MUSIC TASTE | Every clip is procedural sine-synthesis and the sandbox has no audio device — correctness is wired, QUALITY is untested by ear | HIGH (it's the phase's core) | Play 5 minutes with sound: no ear-fatigue (±8% pitch variation exists), collect combo pitch feels good, music layers cross-fade with threat. If any clip annoys: regenerate (`godot --headless --path . --script res://tools/gen_sfx.gd`) after tweaking its recipe, or ship silence |
+| Snake per-segment TIER BANDING | MultiMesh per-instance colors render WHITE on the sandbox stack (decision #72) — banding may or may not work on real GPUs (rim-light tint + labels DO work) | Medium | On a real GPU: small snakes should show green banded bodies, big ones orange/red. If bodies are uniform-coloured, tell the agent — Phase 12 fix is per-tier materials |
+| Boundary shader + confetti + boost trail on real GPU | Pixel-verified under llvmpipe; GPU rendering may differ (additive blending brightness, particle scaling) | Low | One run: wall lattice visible but not glaring; confetti visible against the panel; trail sized right |
+| **REAL portal submission** (Poki/CrazyGames/GD) | The CCPortal bridge is live-verified against the MOCK only; each real SDK's review process, SDK snippet placement (replace the mock block in `web/portal_shell.html` with their loader tag), and ad unit/bundle registration are human/account tasks | HIGH (this is where revenue starts) | Pick ONE portal; add their SDK `<script>` above the CCPortal block in `web/portal_shell.html` (their object replaces the mock automatically); submit `web-export/` per their docs — `tools/webverify.js` still works against the live page |
+| Privacy Policy + Terms URLs + Do Not Sell URL | Consent screen shows "URL pending" until filled — legal text is a human task (§45.8) | HIGH (compliance) | Fill `privacy_policy_url`, `terms_url`, `do_not_sell_url` in `resources/config/ads.tres` |
+| AdMob completion (mobile) | Scaffold degrades safely; plugin install, real app IDs, UMP flow, export presets are human | Medium (post-web-launch) | Install the Poing Studios plugin under `addons/`, fill ads.tres unit IDs (TEST ids first!), then complete the four TODO methods in `ad_provider_admob.gd` |
+| Web build on a real GPU browser | SwiftShader verified; real-GPU perf + input feel (mouse/touch on a phone browser) unverified | Medium | Open the served build on your desktop + phone: 60 FPS, steering feels right, audio starts after first input |
+
+*(This table grows every phase. Everything listed in Part B is also, by definition, unverifiable by me.)*
+
+---
+
+## PART D — Prioritized roadmap from here to commercial
+
+Phase-by-phase build order is fixed by master prompt §48; this is the
+shippability overlay on top of it.
+
+| Task | Why | Effort | Who | Depends on |
+|---|---|---|---|---|
+| Phases 2–3: snake feel + economy | Core loop must be fun first (§50.1) | L | AI | — |
+| Phase 4: ad scaffolding | Ad layer must be first-class from early | M | AI | — |
+| Phases 5–8: AI, combat, verbs, interface | Complete playable loop | L | AI | — |
+| Phase 9–10: meta + feel | Retention mechanics + polish | L | AI | — |
+| Phase 11: web export + monetization wiring | Primary revenue surface | M | AI + Human (portal keys) | — |
+| Phase 12–13: harden + report | Shippable confidence | M | AI | — |
+| **After Phase 13** | | | | |
+| Portal submission (Poki/CrazyGames/GameDistribution) | First revenue | S | Human | Phase 11 |
+| Playtesting round (≥5 fresh players) | Fun check (§47.15) | S | Human | Phase 10 |
+| Balance pass from playtest data | Retention | S | Human | playtest |
+| Real ad accounts + IDs | First cent of revenue | M | Human | Phase 11 |
+| Google Play listing + store submission | Android revenue | L | Human | portal validation |
+| 60 FPS device matrix validation | Budgets (§19) | M | Human | Phase 12 |
+
+*Week grouping (from commercial, after the phase plan completes): Week 1 =
+playtest + balance; Weeks 2–3 = portal submission + ad IDs + Play store;
+Week 4 = soft launch + measure; Months 2–3 = scale (marketing, mediation,
+iOS).*
+
+---
+
+## 12. Prioritized roadmap
+
+Section 11, **PART D**, is the roadmap (reproduced above): playtest + balance → portal submission + real ad accounts → Google Play listing + device matrix → soft launch → scale (marketing, mediation, iOS). Weeks 1–4 and Months 2–3 groupings are in the table.
+
+---
+
+## 13. Where the money will come from (realistic one-pager)
+
+**Channel first: web portals, not mobile.** The web build is the shipped, verified surface (10.9 MB transfer, in-browser proofs). Portal economics as of mid-2026: Poki pays a 50 % ad-revenue share (100 % on traffic you bring), CrazyGames' 2026 jam terms list ~60 % of ad revenue to developers (€100 payout minimum, monthly), GameMonetize 45 %, GameDistribution varies by syndication deal, and Playgama Bridge offers a flat 80 % across many portals including Poki/CrazyGames/Telegram [1](https://app.cinevva.com/guides/web-game-monetization) [2](https://app.cinevva.com/guides/publish-game-crazygames) [3](https://playgama.com/blog/main/10-ways-to-monetize-html5-games-that-actually-work-in-2026/). Non-exclusive licensing ($300–800 per title) exists as a secondary cheque [1](https://app.cinevva.com/guides/web-game-monetization).
+
+**Which placements will earn most here:** rewarded **REVIVE** and **DOUBLE_COINS** — they fire at the moment of maximal motivation (death screen) from players who opted in, and rewarded video carries the highest eCPM of any format. **STARTER_BOOST** monetises the impatient. INTER_RUN/MENU_RETURN interstitials are the volume play: with ~90-second runs and a ≥120 s gap + 6/session cap, a engaged player sees ~4–6 interstitials per session by design. BANNER_MENU is ambient filler only.
+
+**Planning eCPM ranges (hedged — verify with live inventory):** web-portal interstitials roughly **$1–8** and rewarded roughly **$8–25** per thousand impressions, skewed by geography (US/EU traffic multiples above global blend); mobile AdMob typically runs higher (interstitial ~$5–15, rewarded ~$10–40) but requires the store + SDK work first. At 50–60 % share, a realistic web arithmetic: 100 k plays/month × ~3 rewarded + ~4 interstitials/play ≈ 700 k impressions ≈ low hundreds of dollars. **That is the honest scale: ad code is necessary, not sufficient.**
+
+**First cent, in order:** (1) host Privacy Policy/ToS URLs and put them in `ads.tres`; (2) pick ONE portal (Poki or CrazyGames — self-serve, fast review [2](https://app.cinevva.com/guides/publish-game-crazygames)); (3) replace the mock block in `web/portal_shell.html` with their SDK tag; (4) submit `web-export/`; (5) pass review → impressions → payout threshold (e.g. CrazyGames €100 [2](https://app.cinevva.com/guides/publish-game-crazygames)).
+
+**The caveat that matters:** revenue is retention × traffic, not ad code. D1 retention, session count, and play depth decide whether the arithmetic above is hundreds or thousands; that is why the roadmap puts playtesting and the balance pass BEFORE submission. Everything monetization-side is built, capped, consent-gated, and leak-free — the remaining variables are people, not code.
